@@ -1,0 +1,6 @@
+{
+  "name": "APAAR – Student Data Management & Verification Platform",
+  "description": "AICTE-Approved APAAR ID Student Enrolment, Automated Validation & Intake Audit Platform (SIH26263 - Team Infinity)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
