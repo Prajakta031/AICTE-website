@@ -12,10 +12,28 @@ import {
   Edit2,
   User,
   GraduationCap,
-  ExternalLink
+  Eye,
+  EyeOff,
+  FileText,
+  UploadCloud,
+  FileCheck2,
+  Lock,
+  RefreshCw,
+  HelpCircle,
+  ExternalLink,
+  ShieldAlert,
+  Clock,
+  Sparkles
 } from 'lucide-react';
-import { Student } from '../../types';
-import { formatApaarId } from '../../utils/validationEngine';
+import { Student, ApaarVerificationStatus } from '../../types';
+import {
+  formatApaarId,
+  maskApaarId,
+  getApaarStatusMeta,
+  validateApaarFormatLevel1,
+  compareStudentWithDocument
+} from '../../utils/validationEngine';
+import { OFFICIAL_API_CONFIG } from '../../services/apaarApiService';
 import { useApp } from '../../context/AppContext';
 
 interface StudentDetailModalProps {
@@ -29,11 +47,126 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   onClose,
   onEdit
 }) => {
-  const { submitCorrection, currentUser } = useApp();
+  const {
+    submitCorrection,
+    currentUser,
+    verifyStudentLevel1,
+    compareStudentDocument,
+    markStudentManualReview,
+    requestOfficialVerification,
+    runDemoSimulationVerification
+  } = useApp();
+
+  const [isMasked, setIsMasked] = useState(true);
+
+  // Correction appeal form state
   const [showCorrectionForm, setShowCorrectionForm] = useState(false);
   const [justification, setJustification] = useState('');
   const [proposedCorrection, setProposedCorrection] = useState('');
   const [submittedMessage, setSubmittedMessage] = useState(false);
+
+  // Document upload simulation state (Level 2)
+  const [uploadedDocName, setUploadedDocName] = useState<string>(student.documentRecord?.fileName || 'APAAR_Candidate_Doc.pdf');
+  const [docType, setDocType] = useState<'DigiLocker APAAR Card' | 'ABC Issued Certificate' | 'Scanned Copy'>(
+    student.documentRecord?.documentType || 'DigiLocker APAAR Card'
+  );
+  const [ocrExtractedName, setOcrExtractedName] = useState<string>(student.documentRecord?.extractedName || student.name);
+  const [ocrExtractedApaar, setOcrExtractedApaar] = useState<string>(student.documentRecord?.extractedApaarId || student.apaarId);
+  const [ocrConfidence, setOcrConfidence] = useState<number>(student.documentRecord?.ocrConfidence || 96);
+  const [isProcessingDoc, setIsProcessingDoc] = useState(false);
+  const [docComparisonFeedback, setDocComparisonFeedback] = useState<string | null>(null);
+
+  // Level 3 state
+  const [apiProcessing, setApiProcessing] = useState(false);
+  const [apiFeedback, setApiFeedback] = useState<string | null>(null);
+
+  const statusMeta = getApaarStatusMeta(student.apaarStatus);
+
+  // Run Level 1 verification on button click
+  const handleRunLevel1 = () => {
+    const res = verifyStudentLevel1(student.id);
+    setDocComparisonFeedback(`Level 1 check completed: ${res.statusLabel}. ${res.disclaimer}`);
+    setTimeout(() => setDocComparisonFeedback(null), 4000);
+  };
+
+  // Run Level 2 document comparison
+  const handleRunLevel2Comparison = (preset?: 'match' | 'mismatch' | 'unreadable') => {
+    setIsProcessingDoc(true);
+
+    let nameToCompare = ocrExtractedName;
+    let apaarToCompare = ocrExtractedApaar;
+    let confidence = ocrConfidence;
+    let unreadable = false;
+    let fileName = uploadedDocName;
+
+    if (preset === 'match') {
+      nameToCompare = student.name;
+      apaarToCompare = student.apaarId;
+      confidence = 98;
+      fileName = `DigiLocker_${student.name.replace(/\s+/g, '_')}_APAAR.pdf`;
+      setUploadedDocName(fileName);
+      setOcrExtractedName(nameToCompare);
+      setOcrExtractedApaar(apaarToCompare);
+      setOcrConfidence(confidence);
+    } else if (preset === 'mismatch') {
+      nameToCompare = student.name + ' Kumar';
+      apaarToCompare = student.apaarId;
+      confidence = 91;
+      fileName = `Card_Scan_SpellingMismatch_${student.name.split(' ')[0]}.pdf`;
+      setUploadedDocName(fileName);
+      setOcrExtractedName(nameToCompare);
+      setOcrExtractedApaar(apaarToCompare);
+      setOcrConfidence(confidence);
+    } else if (preset === 'unreadable') {
+      nameToCompare = 'Unreadable';
+      apaarToCompare = 'Unreadable';
+      confidence = 34;
+      unreadable = true;
+      fileName = 'Corrupted_Scan_Blurry.png';
+      setUploadedDocName(fileName);
+      setOcrExtractedName('Unreadable');
+      setOcrExtractedApaar('Unreadable');
+      setOcrConfidence(confidence);
+    }
+
+    setTimeout(() => {
+      const outcome = compareStudentDocument(student.id, {
+        fileName,
+        documentType: docType,
+        extractedName: nameToCompare,
+        extractedApaarId: apaarToCompare,
+        ocrConfidence: confidence,
+        isUnreadable: unreadable
+      });
+
+      setIsProcessingDoc(false);
+      setDocComparisonFeedback(`Document comparison recorded: "${outcome.statusLabel}". (Document Comparison – Not Officially Verified)`);
+      setTimeout(() => setDocComparisonFeedback(null), 4500);
+    }, 600);
+  };
+
+  // Trigger manual review
+  const handleMarkManualReview = () => {
+    markStudentManualReview(student.id, 'Officer flagged document for manual verification');
+    setDocComparisonFeedback('Record marked as "Manual Review Required". Institutional inspection queued.');
+    setTimeout(() => setDocComparisonFeedback(null), 4000);
+  };
+
+  // Run Level 3 Official Check attempt
+  const handleOfficialGatewayCheck = async () => {
+    setApiProcessing(true);
+    const res = await requestOfficialVerification(student.id);
+    setApiProcessing(false);
+    setApiFeedback(res.errorDetail || res.statusMessage);
+  };
+
+  // Run Level 3 Demo Simulation
+  const handleDemoSimulation = async () => {
+    setApiProcessing(true);
+    const res = await runDemoSimulationVerification(student.id);
+    setApiProcessing(false);
+    setApiFeedback(res.statusMessage);
+  };
 
   const handleCorrectionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,7 +194,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-2xl w-full overflow-hidden my-8">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-3xl w-full overflow-hidden my-8">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
           <div className="flex items-center gap-2.5">
@@ -69,8 +202,15 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
               <GraduationCap className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">Student Profile & APAAR Verification</h3>
-              <p className="text-xs text-slate-500 font-mono">Record ID: {student.id}</p>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900">Student Profile & APAAR Verification</h3>
+                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${statusMeta.badgeClass}`}>
+                  {statusMeta.label}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-mono">
+                Record ID: {student.id} · {student.institutionName}
+              </p>
             </div>
           </div>
           <button
@@ -82,24 +222,15 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         </div>
 
         <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
-          {/* Simulated APAAR Digital Credential Card */}
+          {/* APAAR Digital Credential Card with Privacy Masking */}
           <div className="relative rounded-xl border border-teal-200 shadow-md p-5 overflow-hidden text-slate-800 bg-gradient-to-br from-teal-50/70 via-white to-blue-50/50">
-            {/* Background Guilloche Texture */}
-            <div
-              className="absolute inset-0 opacity-15 pointer-events-none bg-cover bg-center"
-              style={{ backgroundImage: `url('/src/assets/images/apaar_digital_card_bg_1793373599190.jpg')` }}
-            />
-
             <div className="relative z-10 flex flex-col justify-between h-full gap-4">
               {/* Card Top Strip */}
               <div className="flex items-start justify-between border-b border-teal-200/80 pb-3">
                 <div className="flex items-center gap-3">
-                  <img
-                    src="/src/assets/images/aicte_emblem_insignia_1793373599365.jpg"
-                    alt="AICTE Insignia"
-                    referrerPolicy="no-referrer"
-                    className="w-10 h-10 object-contain rounded-full shadow-xs"
-                  />
+                  <div className="w-10 h-10 rounded-full bg-teal-800 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                    AICTE
+                  </div>
                   <div>
                     <div className="text-[10px] tracking-wider uppercase font-semibold text-teal-800">
                       Ministry of Education · Government of India
@@ -108,32 +239,19 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                       APAAR · Automated Permanent Academic Account Registry
                     </div>
                     <div className="text-[11px] text-slate-500">
-                      One Nation, One Student ID (ABC ID Ecosystem)
+                      One Nation, One Student ID (Academic Bank of Credits)
                     </div>
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold ${
-                      student.validationStatus === 'valid'
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                        : student.validationStatus === 'review'
-                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                        : 'bg-rose-100 text-rose-800 border border-rose-300'
-                    }`}
-                  >
-                    {student.validationStatus === 'valid' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
-                    {student.validationStatus === 'review' && <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />}
-                    {student.validationStatus === 'error' && <XCircle className="w-3.5 h-3.5 text-rose-600" />}
-                    <span>
-                      {student.validationStatus === 'valid'
-                        ? 'Valid Record'
-                        : student.validationStatus === 'review'
-                        ? 'Requires Review'
-                        : 'Error Detected'}
-                    </span>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold border ${statusMeta.badgeClass}`}>
+                    <span className={`w-2 h-2 rounded-full ${statusMeta.dotColor}`} />
+                    <span>{statusMeta.label}</span>
                   </span>
+                  <div className="text-[10px] text-slate-500 mt-1 font-mono">
+                    Tier: {statusMeta.levelBadge}
+                  </div>
                 </div>
               </div>
 
@@ -146,9 +264,30 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                   </div>
 
                   <div>
-                    <div className="text-[11px] text-slate-500 font-medium uppercase tracking-wide">APAAR 12-Digit Identifier</div>
-                    <div className="text-xl font-mono font-bold tracking-widest text-teal-900">
-                      {formatApaarId(student.apaarId) || 'NOT ASSIGNED'}
+                    <div className="flex items-center justify-between pr-4">
+                      <div className="text-[11px] text-slate-500 font-medium uppercase tracking-wide">
+                        APAAR 12-Digit Identifier (Masked for Privacy)
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsMasked(!isMasked)}
+                        className="text-xs text-teal-800 hover:text-teal-950 flex items-center gap-1 cursor-pointer font-medium"
+                      >
+                        {isMasked ? (
+                          <>
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Reveal ID</span>
+                          </>
+                        ) : (
+                          <>
+                            <EyeOff className="w-3.5 h-3.5" />
+                            <span>Mask ID</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <div className="text-xl font-mono font-bold tracking-widest text-teal-900 mt-0.5">
+                      {isMasked ? maskApaarId(student.apaarId) : formatApaarId(student.apaarId) || 'NOT ASSIGNED'}
                     </div>
                   </div>
 
@@ -164,7 +303,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                   </div>
                 </div>
 
-                {/* Institution & QR simulation block */}
+                {/* Institution block */}
                 <div className="flex flex-col items-end justify-between border-t sm:border-t-0 sm:border-l border-teal-200/60 pt-3 sm:pt-0 sm:pl-4 text-right">
                   <div className="text-xs">
                     <div className="text-[10px] text-slate-400 uppercase font-medium">Institution</div>
@@ -179,24 +318,406 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                     </div>
                   </div>
 
-                  {/* QR Pattern visual */}
-                  <div className="w-16 h-16 bg-white p-1 rounded border border-slate-300 shadow-2xs mt-2 self-end flex items-center justify-center">
-                    <div className="w-full h-full bg-slate-900 rounded-xs flex items-center justify-center text-[9px] text-white font-mono font-bold">
-                      QR·OK
-                    </div>
+                  <div className="p-2 bg-white rounded border border-slate-200 text-right mt-2 text-[10px] text-slate-600">
+                    <div className="font-medium text-slate-800">Verification Source:</div>
+                    <div className="text-slate-500 truncate max-w-[180px]">{student.verificationSource || 'Level 1 Engine'}</div>
+                    <div className="text-[9px] text-slate-400 mt-0.5 font-mono">{student.verificationDate || 'Recent'}</div>
                   </div>
                 </div>
               </div>
 
-              {/* Disclaimer Notice */}
-              <div className="text-[10px] text-slate-500 pt-2 border-t border-teal-200/60 flex items-center justify-between">
-                <span>Synthetic simulation for AICTE SIH26263 platform. Does not query live UIDAI/DigiLocker servers.</span>
-                <span className="font-mono">Admitted: {student.dateOfAdmission}</span>
+              {/* Card Footer Notice */}
+              <div className="text-[10px] text-slate-500 pt-2 border-t border-teal-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <span className="italic">
+                  {statusMeta.description}
+                </span>
+                <span className="font-mono text-slate-400">Admitted: {student.dateOfAdmission}</span>
               </div>
             </div>
           </div>
 
-          {/* Cross-Institution Dual Enrolment Alert Callout if exists */}
+          {/* Feedback alert after action */}
+          {docComparisonFeedback && (
+            <div className="p-3 rounded-lg bg-teal-50 border border-teal-300 text-teal-900 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-teal-700 shrink-0" />
+              <span>{docComparisonFeedback}</span>
+            </div>
+          )}
+
+          {/* 3-LEVEL VERIFICATION WORKFLOW TABS */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+            <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-teal-700" />
+                  <span>Transparent Three-Level APAAR Verification Workflow</span>
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Clear separation between format validation, document comparison, and authorized government API integration.
+                </p>
+              </div>
+            </div>
+
+            {/* Three Sequential Verification Stages (No bulky tab buttons) */}
+            <div className="divide-y divide-slate-200">
+              {/* LEVEL 1: FORMAT VALIDATION */}
+              <div className="p-4 space-y-3 text-xs bg-white">
+                <div className="flex items-center justify-between pb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-800 text-[11px] font-bold flex items-center justify-center font-mono">1</span>
+                    <h5 className="font-bold text-slate-900 text-xs uppercase tracking-wide">
+                      Level 1: APAAR Format Validation
+                    </h5>
+                  </div>
+                  <span className="text-[10px] font-semibold text-blue-800 bg-blue-100 px-2 py-0.5 rounded">
+                    Format Valid (Not Official)
+                  </span>
+                </div>
+
+                {/* Result Pill & Disclaimer */}
+                <div className="p-3.5 rounded-lg bg-blue-50/70 border border-blue-200 text-blue-900 flex items-start gap-2.5">
+                  <FileCheck2 className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-bold text-xs flex items-center gap-2">
+                      <span>Level 1 Status:</span>
+                      <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-300 font-mono">
+                        {student.apaarStatus === 'invalid_format' ? 'Invalid Format' : 'Format Valid'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-blue-800 leading-relaxed">
+                      <strong>Important Notice:</strong> "Format Valid" verifies that the APAAR ID adheres to the 12-digit numeric specification, contains no illegal dummy sequences (e.g. 000000000000), and has no active duplicate collisions.
+                      <span className="block font-semibold text-rose-700 mt-0.5">
+                        Format Valid does not mean Officially Verified against the government registry.
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Validation checklist */}
+                <div className="space-y-2 border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+                  <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Format & Syntax Audit Checks
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between p-2 rounded bg-white border border-slate-200">
+                      <span className="text-slate-700">Exactly 12 Numeric Digits Check</span>
+                      <span className="flex items-center gap-1 font-semibold text-emerald-700 font-mono text-[11px]">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        {student.apaarId.replace(/[\s-]/g, '').length === 12 ? 'Passed (12 digits)' : 'Failed'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between p-2 rounded bg-white border border-slate-200">
+                      <span className="text-slate-700">Dummy / Repetitive Sequence Rejection (e.g. 000000000000)</span>
+                      <span className="flex items-center gap-1 font-semibold text-emerald-700 font-mono text-[11px]">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Passed (No trivial sequence)
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between p-2 rounded bg-white border border-slate-200">
+                      <span className="text-slate-700">Intra-Institutional Duplicate Check (Same College)</span>
+                      <span className="flex items-center gap-1 font-semibold text-emerald-700 font-mono text-[11px]">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Unique in Institution
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between p-2 rounded bg-white border border-slate-200">
+                      <span className="text-slate-700">Inter-Institutional Duplicate Enrolment Check (Cross-College)</span>
+                      <span className={`flex items-center gap-1 font-semibold font-mono text-[11px] ${
+                        student.crossInstitutionConflict ? 'text-amber-700' : 'text-emerald-700'
+                      }`}>
+                        {student.crossInstitutionConflict ? (
+                          <>
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Flagged Conflict</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Clean (No Dual Enrolment)</span>
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    Audit Date: {student.verificationDate || 'Recently validated'}
+                  </span>
+                  <button
+                    onClick={handleRunLevel1}
+                    className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-800 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-slate-600" />
+                    Re-run Level 1 Check
+                  </button>
+                </div>
+              </div>
+
+              {/* LEVEL 2: DOCUMENT-BASED COMPARISON */}
+              <div className="p-4 space-y-3 text-xs bg-slate-50/30">
+                <div className="flex items-center justify-between pb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold flex items-center justify-center font-mono">2</span>
+                    <h5 className="font-bold text-slate-900 text-xs uppercase tracking-wide">
+                      Level 2: Document-Based Comparison
+                    </h5>
+                  </div>
+                  <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
+                    Document Match (Not Official)
+                  </span>
+                </div>
+
+                {/* Mandatory Disclaimer */}
+                <div className="p-3.5 rounded-lg bg-amber-50/70 border border-amber-300 text-amber-900 flex items-start gap-2.5">
+                  <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-bold text-xs flex items-center gap-2">
+                      <span>Stage:</span>
+                      <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-semibold">
+                        Document Comparison – Not Officially Verified
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                      Upload candidate's APAAR card issued via DigiLocker or Academic Bank of Credits (ABC). Text extraction compares the candidate's name and 12-digit number against institutional records.
+                      <span className="block font-semibold text-rose-700 mt-0.5">
+                        Notice: An uploaded PDF or image does not prove authentic government issuance simply because text extraction succeeds.
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Upload & Preset Selector */}
+                <div className="border border-slate-200 rounded-lg p-3 bg-white space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                      <UploadCloud className="w-4 h-4 text-teal-700" />
+                      <span>Upload Student Document (DigiLocker PDF / Scanned Card)</span>
+                    </label>
+                    <span className="text-[10px] text-slate-500">Secure Client-Side Analysis</span>
+                  </div>
+
+                  {/* Preset test buttons for judges */}
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-medium text-slate-600">Quick Test Scenarios for Demonstration:</div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleRunLevel2Comparison('match')}
+                        className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-[11px] font-medium transition-colors cursor-pointer"
+                      >
+                        ✓ Demo: Matching DigiLocker Card
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRunLevel2Comparison('mismatch')}
+                        className="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-800 text-[11px] font-medium transition-colors cursor-pointer"
+                      >
+                        ⚠ Demo: Name Spelling Mismatch
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRunLevel2Comparison('unreadable')}
+                        className="px-2.5 py-1 rounded bg-purple-50 hover:bg-purple-100 border border-purple-300 text-purple-800 text-[11px] font-medium transition-colors cursor-pointer"
+                      >
+                        🔍 Demo: Blurry / Unreadable Document
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Document metadata display */}
+                  <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-slate-500" />
+                        <span className="font-mono font-semibold text-slate-800">{uploadedDocName}</span>
+                      </div>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                        {docType}
+                      </span>
+                    </div>
+
+                    {/* Extracted fields comparison table */}
+                    <div className="divide-y divide-slate-100 pt-1 text-xs">
+                      <div className="py-1.5 flex items-center justify-between">
+                        <span className="text-slate-500">Submitted Name:</span>
+                        <span className="font-semibold text-slate-900">{student.name}</span>
+                      </div>
+                      <div className="py-1.5 flex items-center justify-between">
+                        <span className="text-slate-500">Document Extracted Name:</span>
+                        <span className="font-mono font-semibold text-slate-800">{ocrExtractedName}</span>
+                      </div>
+                      <div className="py-1.5 flex items-center justify-between">
+                        <span className="text-slate-500">Submitted APAAR ID:</span>
+                        <span className="font-mono text-slate-900">{formatApaarId(student.apaarId)}</span>
+                      </div>
+                      <div className="py-1.5 flex items-center justify-between">
+                        <span className="text-slate-500">Document Extracted APAAR:</span>
+                        <span className="font-mono text-slate-800">{formatApaarId(ocrExtractedApaar)}</span>
+                      </div>
+                      <div className="py-1.5 flex items-center justify-between">
+                        <span className="text-slate-500">Text Extraction Confidence:</span>
+                        <span className="font-semibold text-teal-800 font-mono">{ocrConfidence}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleRunLevel2Comparison()}
+                      disabled={isProcessingDoc}
+                      className="px-3.5 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {isProcessingDoc ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Processing Document...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FileCheck2 className="w-3.5 h-3.5" />
+                          <span>Compare Extracted Details</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={handleMarkManualReview}
+                      className="px-3 py-1.5 rounded-lg border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-900 font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Mark for Manual Review</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Outcome badge if available */}
+                {student.documentRecord && (
+                  <div className="p-3 rounded-lg border bg-white border-slate-200 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800">Latest Document Comparison Result:</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                        student.documentRecord.status === 'matched'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : student.documentRecord.status === 'mismatch'
+                          ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                          : 'bg-purple-100 text-purple-800 border border-purple-300'
+                      }`}>
+                        {student.documentRecord.status === 'matched'
+                          ? 'Document Details Matched'
+                          : student.documentRecord.status === 'mismatch'
+                          ? 'Document Mismatch'
+                          : 'Manual Review Required'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600">
+                      {student.documentRecord.remarks}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* LEVEL 3: OFFICIAL APAAR/ABC API INTEGRATION */}
+              <div className="p-4 space-y-3 text-xs bg-white">
+                <div className="flex items-center justify-between pb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center justify-center font-mono">3</span>
+                    <h5 className="font-bold text-slate-900 text-xs uppercase tracking-wide">
+                      Level 3: Official APAAR/ABC API Integration
+                    </h5>
+                  </div>
+                  <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded">
+                    API Access Pending
+                  </span>
+                </div>
+
+                {/* Prominent Access Pending State */}
+                <div className="p-4 rounded-lg bg-slate-900 text-white space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Lock className="w-4 h-4 text-amber-400" />
+                      <span className="font-bold text-xs text-amber-300">
+                        {OFFICIAL_API_CONFIG.statusLabel}
+                      </span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-mono border border-slate-700">
+                      Integration Ready
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Production verification requires an authorized institutional MoU with the Ministry of Education and API Setu credentials (mTLS certificate & API Key). In accordance with hackathon ethics, live government requests are disabled.
+                  </p>
+                </div>
+
+                {/* Technical Gateway Contract Specifications */}
+                <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2">
+                  <div className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">
+                    API Setu / ABC Gateway Specifications (Staged Backend Contract)
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                    <div className="p-2 rounded bg-white border border-slate-200">
+                      <span className="text-slate-400 block text-[10px]">API Directory</span>
+                      <span className="font-semibold text-slate-800 font-mono text-[10px]">
+                        directory.apisetu.gov.in/api-collection/abc
+                      </span>
+                    </div>
+                    <div className="p-2 rounded bg-white border border-slate-200">
+                      <span className="text-slate-400 block text-[10px]">Authentication Scheme</span>
+                      <span className="font-semibold text-slate-800">OAuth 2.0 + HMAC SHA-256</span>
+                    </div>
+                    <div className="p-2 rounded bg-white border border-slate-200">
+                      <span className="text-slate-400 block text-[10px]">Schema Version</span>
+                      <span className="font-semibold text-slate-800 font-mono text-[10px]">ABC-APAAR v2.1 (NeGD)</span>
+                    </div>
+                    <div className="p-2 rounded bg-white border border-slate-200">
+                      <span className="text-slate-400 block text-[10px]">Credential State</span>
+                      <span className="font-semibold text-amber-700">Pending Ministry Approval</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live vs Demo actions */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {/* Disabled Live Button */}
+                    <button
+                      disabled
+                      title="Disabled pending authorized production credentials"
+                      className="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-500 font-semibold text-xs flex items-center gap-1.5 cursor-not-allowed border border-slate-300"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Live Government Gateway (API Access Pending)</span>
+                    </button>
+
+                    {/* Demo Mode Button */}
+                    <button
+                      onClick={handleDemoSimulation}
+                      disabled={apiProcessing}
+                      className="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Run Demo Simulation</span>
+                    </button>
+                  </div>
+
+                  {apiFeedback && (
+                    <div className="p-3 rounded-lg bg-orange-50 border border-orange-300 text-orange-900 text-xs">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-orange-600" />
+                        <span>Demo Simulation – Not Official</span>
+                      </div>
+                      <p className="mt-1 text-[11px] leading-relaxed">
+                        {apiFeedback}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Cross-Institution Conflict Callout if present */}
           {student.crossInstitutionConflict && (
             <div className="p-4 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 space-y-2">
               <div className="flex items-center gap-2 font-bold text-sm text-amber-800">
@@ -215,63 +736,10 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                 </div>
               </div>
               <p className="text-[11px] text-amber-700 italic">
-                Rule 4: Candidate must submit seat cancellation or migration proof to clear the duplicate lock.
+                Candidate must submit seat cancellation or migration proof to clear the duplicate lock.
               </p>
             </div>
           )}
-
-          {/* Validation Engine Rule-by-Rule Breakdown */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-teal-700" />
-                <span>Automated Validation Engine Audit (6 Rules Checked)</span>
-              </h4>
-              <span className="text-xs text-slate-500 font-mono">
-                {student.validationChecks?.filter(c => c.passed).length || 0} / {student.validationChecks?.length || 6} Passed
-              </span>
-            </div>
-
-            <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg overflow-hidden bg-slate-50/50">
-              {student.validationChecks && student.validationChecks.length > 0 ? (
-                student.validationChecks.map((check, idx) => (
-                  <div key={idx} className="p-3 text-xs flex items-start gap-3 bg-white hover:bg-slate-50/80 transition-colors">
-                    {check.severity === 'success' && (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    )}
-                    {check.severity === 'warning' && (
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    )}
-                    {check.severity === 'error' && (
-                      <XCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                    )}
-
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-slate-900">{check.name}</span>
-                        <span
-                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-medium ${
-                            check.severity === 'success'
-                              ? 'text-emerald-700 bg-emerald-50'
-                              : check.severity === 'warning'
-                              ? 'text-amber-700 bg-amber-50'
-                              : 'text-rose-700 bg-rose-50'
-                          }`}
-                        >
-                          {check.ruleId}
-                        </span>
-                      </div>
-                      <p className="text-slate-600 mt-0.5 text-[11px] leading-relaxed">
-                        {check.message}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="p-3 text-xs text-slate-500">Validation checks pending.</div>
-              )}
-            </div>
-          </div>
 
           {/* Remediation & Correction Appeal Form */}
           {showCorrectionForm && (
@@ -341,7 +809,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             {!showCorrectionForm && (
               <button
                 onClick={() => setShowCorrectionForm(true)}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-white text-slate-700 text-xs font-medium transition-colors"
+                className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-white text-slate-700 text-xs font-medium transition-colors cursor-pointer"
               >
                 File Correction Appeal
               </button>

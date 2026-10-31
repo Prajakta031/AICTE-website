@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShieldAlert, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { X, ShieldAlert, CheckCircle2, AlertTriangle, Zap, Send, Clock } from 'lucide-react';
 import { Student } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { normalizeApaarId, formatApaarId } from '../../utils/validationEngine';
+import { verifyApaarApi, VerificationResult } from '../../services/apaarApi';
 
 interface StudentFormModalProps {
   initialStudent?: Student | null;
@@ -10,7 +11,7 @@ interface StudentFormModalProps {
 }
 
 export const StudentFormModal: React.FC<StudentFormModalProps> = ({ initialStudent, onClose }) => {
-  const { currentInstitution, addStudent, updateStudent, students } = useApp();
+  const { currentInstitution, addStudent, updateStudent, students, institutions } = useApp();
 
   const isEditing = !!initialStudent;
 
@@ -32,10 +33,34 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({ initialStude
   const [gender, setGender] = useState<Student['gender']>(initialStudent?.gender || 'Male');
   const [email, setEmail] = useState(initialStudent?.email || '');
 
-  // Real-time APAAR format evaluation
+  // Live API Verification state
+  const [isVerifyingApi, setIsVerifyingApi] = useState(false);
+  const [apaarResult, setApaarResult] = useState<VerificationResult | null>(null);
+
   const cleanId = normalizeApaarId(apaarId);
   const is12Digits = cleanId.length === 12 && /^\d+$/.test(cleanId);
   const isDummy = cleanId === '000000000000' || cleanId === '111111111111' || cleanId === '123456789012';
+
+  // Trigger POST /api/demo/verify against mock APAAR registry
+  const handleVerifyWithApi = async () => {
+    if (!cleanId) return;
+    setIsVerifyingApi(true);
+    try {
+      const resp = await verifyApaarApi(cleanId, name.trim(), currentInstitution.name);
+      setApaarResult(resp);
+    } catch (err) {
+      console.error('API Verification error:', err);
+    } finally {
+      setIsVerifyingApi(false);
+    }
+  };
+
+  const handleApplyApaarDetails = () => {
+    if (!apaarResult?.student) return;
+    if (apaarResult.student.student_name) setName(apaarResult.student.student_name);
+    if (apaarResult.student.department) setDepartment(apaarResult.student.department);
+    if (apaarResult.student.academic_year) setAcademicYear(apaarResult.student.academic_year);
+  };
 
   // Check if APAAR already exists in same college
   const isLocalDuplicate = students.some(
@@ -173,6 +198,91 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({ initialStude
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 Format structure valid (12 Digits).
               </p>
+            )}
+
+            {/* Live API Verification Button & Result */}
+            <div className="mt-2.5 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleVerifyWithApi}
+                disabled={isVerifyingApi || !cleanId}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors cursor-pointer disabled:opacity-40"
+              >
+                {isVerifyingApi ? (
+                  <>
+                    <div className="w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                    <span>Verifying with APAAR Registry...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Verify with APAAR Registry (POST /api/demo/verify)</span>
+                  </>
+                )}
+              </button>
+
+              {apaarResult?.latency_ms !== undefined && (
+                <span className="text-[11px] font-mono text-slate-500 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  <span>{apaarResult.latency_ms} ms</span>
+                </span>
+              )}
+            </div>
+
+            {/* API Result Display */}
+            {apaarResult && (
+              <div className={`mt-2 p-3 rounded-xl border text-xs space-y-2 ${
+                apaarResult.status === 'DEMO_MATCH'
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                  : apaarResult.status === 'DEMO_MISMATCH'
+                  ? 'bg-amber-50 border-amber-300 text-amber-950'
+                  : apaarResult.status === 'DEMO_DUPLICATE'
+                  ? 'bg-purple-50 border-purple-300 text-purple-950'
+                  : 'bg-rose-50 border-rose-300 text-rose-950'
+              }`}>
+                <div className="flex items-center justify-between font-bold">
+                  <span className="flex items-center gap-1.5">
+                    {apaarResult.status === 'DEMO_MATCH' ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    ) : apaarResult.status === 'DEMO_MISMATCH' || apaarResult.status === 'DEMO_DUPLICATE' ? (
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    ) : (
+                      <ShieldAlert className="w-4 h-4 text-rose-600" />
+                    )}
+                    <span>{apaarResult.status} (Mode: {apaarResult.mode})</span>
+                  </span>
+                  <span className="font-mono text-[10px] uppercase px-1.5 py-0.5 rounded bg-white/70">
+                    HTTP 200
+                  </span>
+                </div>
+                <p className="text-[11px] opacity-90 leading-relaxed">
+                  {apaarResult.message}
+                </p>
+
+                {/* If student details returned from mock APAAR */}
+                {apaarResult.student && (
+                  <div className="bg-white/80 p-2.5 rounded-lg border border-emerald-200 mt-2 space-y-1.5 text-[11px]">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900">
+                        Registry Match: {apaarResult.student.student_name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleApplyApaarDetails}
+                        className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[10px] cursor-pointer"
+                      >
+                        Auto-fill Details
+                      </button>
+                    </div>
+                    <div className="text-slate-600 grid grid-cols-2 gap-1">
+                      <div>Institution: <span className="font-medium text-slate-800">{apaarResult.student.institution_name}</span></div>
+                      <div>Dept: <span className="font-medium text-slate-800">{apaarResult.student.department}</span></div>
+                      <div>Code: <span className="font-mono text-slate-800">{apaarResult.student.aicte_institution_code}</span></div>
+                      <div>Status: <span className="font-semibold text-emerald-700">{apaarResult.student.admission_status}</span></div>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

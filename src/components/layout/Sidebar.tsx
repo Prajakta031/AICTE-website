@@ -4,15 +4,16 @@ import {
   Users,
   UploadCloud,
   FileCheck2,
-  Bell,
-  Settings,
-  Building,
-  AlertTriangle,
-  ClipboardCheck,
+  Copy,
+  Layers,
   FileBarChart,
+  Bell,
+  Building,
   ShieldCheck,
-  CheckCircle2,
-  Info
+  Building2,
+  HelpCircle,
+  Sparkles,
+  Zap
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -22,9 +23,9 @@ export const Sidebar: React.FC = () => {
     activeTab,
     setActiveTab,
     alerts,
-    corrections,
     students,
-    currentInstitution
+    currentInstitution,
+    theme
   } = useApp();
 
   const isAicte = currentUser.role === 'aicte_admin';
@@ -36,58 +37,196 @@ export const Sidebar: React.FC = () => {
 
   const aicteUnresolvedAlerts = alerts.filter(a => !a.isResolved).length;
 
-  const pendingCorrectionsCount = corrections.filter(c => c.status === 'pending').length;
-
-  // Flagged records count for current college
-  const flaggedStudentsCount = students.filter(
-    s => s.institutionId === currentUser.institutionId && (s.validationStatus === 'error' || s.validationStatus === 'review')
+  // Flagged records count
+  const flaggedCount = students.filter(
+    s => (isAicte || s.institutionId === currentUser.institutionId) &&
+         (s.validationStatus === 'error' || s.validationStatus === 'review')
   ).length;
 
+  // Duplicate count
+  const duplicateCount = students.filter(
+    s => (isAicte || s.institutionId === currentUser.institutionId) &&
+         s.validationChecks?.some(c => (c.ruleId === 'RULE_LOCAL_DUPLICATE' || c.ruleId === 'RULE_CROSS_INSTITUTION_DUPLICATE') && !c.passed)
+  ).length;
+
+  // Theme-specific styles
+  const getThemeClasses = () => {
+    switch (theme) {
+      case 'bharat-royal':
+        return {
+          activeBtn: 'bg-orange-50/90 text-orange-950 font-bold border border-orange-200/90 shadow-2xs',
+          activeIcon: 'text-orange-600',
+          avatarBg: isAicte ? 'bg-slate-900 text-amber-300' : 'bg-orange-600 text-white',
+          bottomTag: 'text-orange-600'
+        };
+      case 'digital-indigo':
+        return {
+          activeBtn: 'bg-indigo-50 text-indigo-950 font-bold border border-indigo-200 shadow-2xs',
+          activeIcon: 'text-indigo-600',
+          avatarBg: isAicte ? 'bg-slate-900 text-sky-300' : 'bg-indigo-700 text-white',
+          bottomTag: 'text-indigo-600'
+        };
+      case 'academic-emerald':
+        return {
+          activeBtn: 'bg-emerald-50 text-emerald-950 font-bold border border-emerald-200 shadow-2xs',
+          activeIcon: 'text-emerald-700',
+          avatarBg: isAicte ? 'bg-emerald-950 text-amber-300' : 'bg-emerald-700 text-white',
+          bottomTag: 'text-emerald-700'
+        };
+      case 'minimal-slate':
+        return {
+          activeBtn: 'bg-slate-100 text-slate-950 font-bold border border-slate-300 shadow-2xs',
+          activeIcon: 'text-blue-600',
+          avatarBg: isAicte ? 'bg-slate-900 text-slate-100' : 'bg-slate-700 text-white',
+          bottomTag: 'text-blue-600'
+        };
+      case 'executive-dark':
+        return {
+          activeBtn: 'bg-slate-800 text-amber-300 font-bold border border-amber-500/40 shadow-2xs',
+          activeIcon: 'text-amber-400',
+          avatarBg: isAicte ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-amber-400 border border-slate-700',
+          bottomTag: 'text-amber-400'
+        };
+      default:
+        return {
+          activeBtn: 'bg-orange-50 text-orange-950 font-bold border border-orange-200 shadow-2xs',
+          activeIcon: 'text-orange-600',
+          avatarBg: isAicte ? 'bg-slate-900 text-amber-300' : 'bg-orange-600 text-white',
+          bottomTag: 'text-orange-600'
+        };
+    }
+  };
+
+  const themeClasses = getThemeClasses();
+
+
+  // 8 Clear, Simple Sections for Non-Technical Users
   const collegeNavItems = [
-    { id: 'dashboard', label: 'College Dashboard', icon: LayoutDashboard },
+    {
+      id: 'overview',
+      label: 'Overview',
+      sub: 'Summary & quick numbers',
+      icon: LayoutDashboard
+    },
     {
       id: 'students',
       label: 'Student Records',
-      icon: Users,
-      badge: flaggedStudentsCount > 0 ? `${flaggedStudentsCount} flagged` : undefined,
+      sub: 'Search & view students',
+      icon: Users
+    },
+    {
+      id: 'upload',
+      label: 'Upload Student Data',
+      sub: 'Upload Excel or CSV file',
+      icon: UploadCloud
+    },
+    {
+      id: 'validation',
+      label: 'Data Verification',
+      sub: 'Check for errors & issues',
+      icon: FileCheck2,
+      badge: flaggedCount > 0 ? `${flaggedCount} issues` : undefined,
       badgeType: 'warning'
     },
-    { id: 'upload', label: 'Upload Data (CSV/Excel)', icon: UploadCloud },
-    { id: 'validation', label: 'Validation Reports', icon: FileCheck2 },
     {
-      id: 'notifications',
-      label: 'Alerts & Notifications',
-      icon: Bell,
-      badge: collegeUnresolvedAlerts > 0 ? String(collegeUnresolvedAlerts) : undefined,
+      id: 'api-verifier',
+      label: 'API Demo Verifier',
+      sub: 'POST /api/demo/verify',
+      icon: Zap,
+      badge: 'LIVE API',
+      badgeType: 'api'
+    },
+    {
+      id: 'duplicates',
+      label: 'Duplicate Detection',
+      sub: 'Find duplicate student IDs',
+      icon: Copy,
+      badge: duplicateCount > 0 ? `${duplicateCount}` : undefined,
       badgeType: 'danger'
     },
-    { id: 'settings', label: 'Institution Profile', icon: Settings }
+    {
+      id: 'intake',
+      label: 'Intake Monitoring',
+      sub: 'Compare seats vs admissions',
+      icon: Layers
+    },
+    {
+      id: 'reports',
+      label: 'Reports',
+      sub: 'Download Excel or PDF',
+      icon: FileBarChart
+    },
+    {
+      id: 'notifications',
+      label: 'Notifications',
+      sub: 'Alerts & updates',
+      icon: Bell,
+      badge: collegeUnresolvedAlerts > 0 ? `${collegeUnresolvedAlerts}` : undefined,
+      badgeType: 'danger'
+    }
   ];
 
   const aicteNavItems = [
-    { id: 'dashboard', label: 'National Dashboard', icon: LayoutDashboard },
-    { id: 'institutions', label: 'Institution Directory', icon: Building },
-    { id: 'students', label: 'Master Student Registry', icon: Users },
     {
-      id: 'duplicates',
-      label: 'Cross-College Duplicates',
-      icon: AlertTriangle,
-      badge: 'Active Audit',
+      id: 'overview',
+      label: 'National Overview',
+      sub: 'All-India census & summary',
+      icon: LayoutDashboard
+    },
+    {
+      id: 'institutions',
+      label: 'Colleges Directory',
+      sub: 'Approved campuses & quotas',
+      icon: Building
+    },
+    {
+      id: 'students',
+      label: 'Master Student List',
+      sub: 'National student registry',
+      icon: Users
+    },
+    {
+      id: 'validation',
+      label: 'Data Verification',
+      sub: 'Check national compliance',
+      icon: FileCheck2,
+      badge: flaggedCount > 0 ? `${flaggedCount}` : undefined,
       badgeType: 'warning'
     },
     {
-      id: 'corrections',
-      label: 'Correction Requests',
-      icon: ClipboardCheck,
-      badge: pendingCorrectionsCount > 0 ? String(pendingCorrectionsCount) : undefined,
+      id: 'api-verifier',
+      label: 'API Demo Verifier',
+      sub: 'POST /api/demo/verify',
+      icon: Zap,
+      badge: 'LIVE API',
+      badgeType: 'api'
+    },
+    {
+      id: 'duplicates',
+      label: 'Duplicate Detection',
+      sub: 'Dual college admissions',
+      icon: Copy,
+      badge: duplicateCount > 0 ? `${duplicateCount}` : undefined,
       badgeType: 'danger'
     },
-    { id: 'reports', label: 'Consolidated Reports', icon: FileBarChart },
+    {
+      id: 'intake',
+      label: 'Intake Monitoring',
+      sub: 'Colleges exceeding seats',
+      icon: Layers
+    },
+    {
+      id: 'reports',
+      label: 'National Reports',
+      sub: 'All-India audit dossiers',
+      icon: FileBarChart
+    },
     {
       id: 'notifications',
-      label: 'National Compliance Alerts',
+      label: 'Alerts & Appeals',
+      sub: 'Review pending requests',
       icon: Bell,
-      badge: aicteUnresolvedAlerts > 0 ? String(aicteUnresolvedAlerts) : undefined,
+      badge: aicteUnresolvedAlerts > 0 ? `${aicteUnresolvedAlerts}` : undefined,
       badgeType: 'danger'
     }
   ];
@@ -95,65 +234,62 @@ export const Sidebar: React.FC = () => {
   const currentNavItems = isAicte ? aicteNavItems : collegeNavItems;
 
   return (
-    <aside className="w-64 bg-slate-900 text-slate-200 shrink-0 flex flex-col justify-between border-r border-slate-800 select-none">
-      <div className="p-4 space-y-6">
-        {/* User Role Card */}
-        <div className="bg-slate-800/80 rounded-lg p-3 border border-slate-700/60">
+    <aside className="w-64 bg-white text-slate-800 shrink-0 flex flex-col justify-between border-r border-slate-200 select-none">
+      <div className="p-3.5 space-y-4">
+        {/* Simple User Identity Header */}
+        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
           <div className="flex items-center gap-2.5">
-            <div className={`w-8 h-8 rounded-md flex items-center justify-center font-bold text-xs ${
-              isAicte ? 'bg-blue-600 text-white' : 'bg-teal-600 text-white'
-            }`}>
-              {isAicte ? 'AICTE' : 'COL'}
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shadow-2xs ${themeClasses.avatarBg}`}>
+              {isAicte ? 'AICTE' : 'DTU'}
             </div>
             <div className="overflow-hidden">
-              <div className="text-xs font-semibold text-white truncate">
+              <span className="text-xs font-bold text-slate-900 block truncate">
                 {currentUser.name}
-              </div>
-              <div className="text-[11px] text-slate-400 truncate">
-                {isAicte ? 'National Directorate' : currentInstitution.name}
-              </div>
+              </span>
+              <span className="text-[11px] text-slate-500 block truncate">
+                {isAicte ? 'AICTE Director' : currentInstitution.name}
+              </span>
             </div>
-          </div>
-          <div className="mt-2.5 pt-2 border-t border-slate-700/50 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Role:</span>
-            <span className={`font-medium ${isAicte ? 'text-blue-400' : 'text-teal-400'}`}>
-              {isAicte ? 'AICTE Administrator' : 'College Administrator'}
-            </span>
           </div>
         </div>
 
-        {/* Navigation list */}
+        {/* Navigation List */}
         <div className="space-y-1">
-          <div className="px-2 text-[10px] font-semibold tracking-wider uppercase text-slate-400">
-            {isAicte ? 'AICTE Oversight Modules' : 'Institutional Workflows'}
+          <div className="px-2 text-[10px] font-bold tracking-wider uppercase text-slate-400">
+            Navigation Menu
           </div>
 
-          <nav className="space-y-1 mt-2">
+          <nav className="space-y-1 pt-1">
             {currentNavItems.map(item => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const isTabActive = activeTab === item.id || (item.id === 'overview' && activeTab === 'dashboard');
 
               return (
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                    isActive
-                      ? 'bg-teal-500/15 text-teal-300 font-semibold border-l-2 border-teal-400 rounded-l-none'
-                      : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-all cursor-pointer ${
+                    isTabActive
+                      ? themeClasses.activeBtn
+                      : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-950'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 truncate">
-                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-teal-400' : 'text-slate-400'}`} />
-                    <span className="truncate">{item.label}</span>
+                    <Icon className={`w-4 h-4 shrink-0 ${isTabActive ? themeClasses.activeIcon : 'text-slate-500'}`} />
+                    <div>
+                      <span className="text-xs font-semibold block leading-tight">{item.label}</span>
+                      <span className="text-[10px] text-slate-500 block leading-tight font-normal">{item.sub}</span>
+                    </div>
                   </div>
 
                   {item.badge && (
                     <span
-                      className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold ${
-                        item.badgeType === 'danger'
-                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
+                        item.badgeType === 'api'
+                          ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                          : item.badgeType === 'danger'
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-amber-100 text-amber-800'
                       }`}
                     >
                       {item.badge}
@@ -164,28 +300,16 @@ export const Sidebar: React.FC = () => {
             })}
           </nav>
         </div>
-
-        {/* NEP 2020 & APAAR Policy Callout */}
-        <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/40 text-[11px] text-slate-400 space-y-1">
-          <div className="flex items-center gap-1.5 text-slate-300 font-semibold text-xs">
-            <Info className="w-3.5 h-3.5 text-teal-400" />
-            <span>NEP 2020 Mandate</span>
-          </div>
-          <p className="leading-relaxed text-[11px]">
-            Automated Permanent Academic Account Registry (One Nation, One Student ID) validation and intake ceiling monitoring.
-          </p>
-        </div>
       </div>
 
-      {/* Footer Branding */}
-      <div className="p-4 border-t border-slate-800 bg-slate-950/40 text-[11px] text-slate-500 flex flex-col gap-1">
-        <div className="flex items-center justify-between text-slate-400 font-medium">
+      {/* Helpful Non-Tech Info at bottom */}
+      <div className="p-3.5 border-t border-slate-200 bg-slate-50/60 text-xs text-slate-600 space-y-1">
+        <div className="flex items-center justify-between font-semibold text-slate-800">
           <span>Smart India Hackathon</span>
-          <span className="font-mono text-teal-400">SIH26263</span>
+          <span className={`font-mono font-bold ${themeClasses.bottomTag}`}>SIH 2026</span>
         </div>
-        <div className="flex items-center justify-between text-[10px]">
-          <span>Team Infinity</span>
-          <span className="text-slate-500">v2.6 Stable</span>
+        <div className="text-[11px] text-slate-500">
+          Team Infinity · Problem SIH26263
         </div>
       </div>
     </aside>

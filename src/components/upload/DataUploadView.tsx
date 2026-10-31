@@ -3,16 +3,17 @@ import {
   UploadCloud,
   FileSpreadsheet,
   Download,
-  AlertCircle,
   CheckCircle2,
   AlertTriangle,
   XCircle,
   Sparkles,
-  RefreshCw,
   ArrowRight,
   Edit2,
   Check,
-  Save
+  Save,
+  HelpCircle,
+  RotateCcw,
+  Info
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { downloadSampleCsvTemplate } from '../../utils/exportUtils';
@@ -34,16 +35,23 @@ interface ParsedRow {
   validationStatus: 'valid' | 'review' | 'error';
   validationChecks: ValidationCheck[];
   flagNotes: string;
-  errorMessages: string[];
+  issueType: string;
+  issueExplanation: string;
+  suggestedCorrection: string;
 }
 
 export const DataUploadView: React.FC = () => {
-  const { currentInstitution, students, institutions, batchUploadStudents, setActiveTab } = useApp();
+  const { currentInstitution, students, institutions, batchUploadStudents, setActiveTab, theme } = useApp();
 
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editFormData, setEditFormData] = useState<{ name: string; apaarId: string; department: string }>({
+    name: '',
+    apaarId: '',
+    department: ''
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadSuccessSummary, setUploadSuccessSummary] = useState<{
     added: number;
@@ -54,19 +62,85 @@ export const DataUploadView: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Parse raw text into structured rows
+  // Parse CSV line safely
+  const parseCsvLine = (text: string): string[] => {
+    const result: string[] = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (char === '"') {
+        if (inQuotes && text[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(cur.trim());
+        cur = '';
+      } else {
+        cur += char;
+      }
+    }
+    result.push(cur.trim());
+    return result;
+  };
+
+  // Analyze errors and create suggested corrections in friendly plain language
+  const derivePlainIssueDetails = (res: any, rowName: string, rawApaar: string) => {
+    const failedChecks = res.validationChecks.filter((c: any) => !c.passed);
+    if (failedChecks.length === 0) {
+      return {
+        issueType: 'None',
+        issueExplanation: 'Record passes all checks.',
+        suggestedCorrection: 'Ready to submit.'
+      };
+    }
+
+    const firstFailed = failedChecks[0];
+    let issueType = 'Information Needed';
+    let issueExplanation = firstFailed.message;
+    let suggestedCorrection = 'Review and update student information.';
+
+    if (firstFailed.ruleId === 'RULE_MANDATORY_FIELDS') {
+      issueType = 'Missing Required Fields';
+      issueExplanation = !rowName ? 'Student name is missing' : 'Student ID (APAAR ID) is empty';
+      suggestedCorrection = 'Enter student full name and 12-digit APAAR ID';
+    } else if (firstFailed.ruleId === 'RULE_APAAR_FORMAT') {
+      issueType = 'Invalid Student ID Format';
+      issueExplanation = rawApaar.length !== 12
+        ? `Student ID has ${rawApaar.length} digits instead of required 12 digits`
+        : 'Student ID contains a placeholder dummy number (e.g. 000000000000)';
+      suggestedCorrection = 'Verify official APAAR / ABC card and enter 12-digit number';
+    } else if (firstFailed.ruleId === 'RULE_LOCAL_DUPLICATE') {
+      issueType = 'Same ID Used Twice in College';
+      issueExplanation = 'This Student ID is already assigned to another student in your institution';
+      suggestedCorrection = 'Check for duplicate entry or typo in APAAR ID';
+    } else if (firstFailed.ruleId === 'RULE_CROSS_INSTITUTION_DUPLICATE') {
+      issueType = 'Student ID Found at Another College';
+      issueExplanation = 'This Student ID is actively registered at another AICTE-approved institution';
+      suggestedCorrection = 'Verify student transfer certificate or seat surrender proof';
+    } else if (firstFailed.ruleId === 'RULE_INTAKE_LIMIT') {
+      issueType = 'Admissions Above Approved Limit';
+      issueExplanation = 'This admission exceeds the sanctioned seat limit for this department';
+      suggestedCorrection = 'Confirm seat quota allocation with Academic Office';
+    }
+
+    return { issueType, issueExplanation, suggestedCorrection };
+  };
+
+  // Parse text content into structured rows
   const parseAndValidateContent = (text: string, sourceName: string) => {
     setFileName(sourceName);
     setUploadSuccessSummary(null);
 
     const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
     if (lines.length <= 1) {
-      alert('File appears to be empty or contains only header row.');
+      alert('The selected file appears to be empty or contains only a header.');
       return;
     }
 
-    // Header inspection
-    const headerLine = lines[0];
     const dataLines = lines.slice(1);
 
     const batchPeers = dataLines.map((line, idx) => {
@@ -115,9 +189,7 @@ export const DataUploadView: React.FC = () => {
         batchPeers
       });
 
-      const errorMessages = res.validationChecks
-        .filter(c => c.severity === 'error' || c.severity === 'warning')
-        .map(c => c.message);
+      const { issueType, issueExplanation, suggestedCorrection } = derivePlainIssueDetails(res, rawName, rawApaar);
 
       return {
         id: rowId,
@@ -134,36 +206,13 @@ export const DataUploadView: React.FC = () => {
         validationStatus: res.validationStatus,
         validationChecks: res.validationChecks,
         flagNotes: res.flagNotes,
-        errorMessages
+        issueType,
+        issueExplanation,
+        suggestedCorrection
       };
     });
 
     setParsedRows(validatedRows);
-  };
-
-  // Robust CSV parser supporting quotes and commas
-  const parseCsvLine = (text: string): string[] => {
-    const result: string[] = [];
-    let cur = '';
-    let inQuotes = false;
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      if (char === '"') {
-        if (inQuotes && text[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (char === ',' && !inQuotes) {
-        result.push(cur.trim());
-        cur = '';
-      } else {
-        cur += char;
-      }
-    }
-    result.push(cur.trim());
-    return result;
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,24 +243,32 @@ export const DataUploadView: React.FC = () => {
     reader.readAsText(file);
   };
 
-  // Pre-load Synthetic Demonstration Batch
-  const loadDemoBatch = () => {
+  // Demo file with intentional mistakes for easy jury demonstration
+  const loadDemoFile = () => {
     const sampleBatchCsv = `Student Name,APAAR ID,Department,Academic Year,Admission Category,Admission Status,Date of Admission,Gender,Email
 Ishaan Mathur,984210923841,Computer Science & Engineering,2025-26,General,Active,2025-08-14,Male,ishaan@example.edu.in
 Bhavna Sen,827103948201,Electronics & Communication,2025-26,OBC,Active,2025-08-12,Female,bhavna@example.edu.in
 Rohan Vikram Singhania,761928401928,Computer Science & Engineering,2025-26,General,Provisional,2025-08-16,Male,rohan@example.edu.in
-Arjun Dummy,000000000000,Civil Engineering,2025-26,SC,Provisional,2025-08-20,Male,arjun@example.edu.in
-Kavita Duplicate,984210923841,Mechanical Engineering,2025-26,ST,Active,2025-08-18,Female,kavita@example.edu.in
+Arjun Kumar,000000000000,Civil Engineering,2025-26,SC,Provisional,2025-08-20,Male,arjun@example.edu.in
+Kavita Sharma,984210923841,Mechanical Engineering,2025-26,ST,Active,2025-08-18,Female,kavita@example.edu.in
 Divya Nambiar,,AI & Data Science,2025-26,EWS,Active,2025-08-15,Female,divya@example.edu.in
 Harshita Verma,491820481029,AI & Data Science,2025-26,General,Active,2025-08-11,Female,harshita@example.edu.in`;
 
-    parseAndValidateContent(sampleBatchCsv, 'SIH_Demonstration_Student_Enrolment_Batch.csv');
+    parseAndValidateContent(sampleBatchCsv, 'SIH_Demonstration_Student_Enrolment.csv');
   };
 
-  // Save row inline edit
-  const handleInlineSave = (rowId: string, updated: Partial<ParsedRow>) => {
+  const startEditRow = (row: ParsedRow) => {
+    setEditingRowId(row.id);
+    setEditFormData({
+      name: row.name,
+      apaarId: row.apaarId,
+      department: row.department
+    });
+  };
+
+  const saveEditRow = (rowId: string) => {
     setParsedRows(prev => {
-      const updatedList = prev.map(r => (r.id === rowId ? { ...r, ...updated } : r));
+      const updatedList = prev.map(r => (r.id === rowId ? { ...r, ...editFormData } : r));
 
       const batchPeers = updatedList.map((item, idx) => ({
         apaarId: normalizeApaarId(item.apaarId),
@@ -245,16 +302,16 @@ Harshita Verma,491820481029,AI & Data Science,2025-26,General,Active,2025-08-11,
           batchPeers
         });
 
-        const errorMessages = res.validationChecks
-          .filter(c => c.severity === 'error' || c.severity === 'warning')
-          .map(c => c.message);
+        const { issueType, issueExplanation, suggestedCorrection } = derivePlainIssueDetails(res, item.name, item.apaarId);
 
         return {
           ...item,
           validationStatus: res.validationStatus,
           validationChecks: res.validationChecks,
           flagNotes: res.flagNotes,
-          errorMessages
+          issueType,
+          issueExplanation,
+          suggestedCorrection
         };
       });
     });
@@ -262,7 +319,7 @@ Harshita Verma,491820481029,AI & Data Science,2025-26,General,Active,2025-08-11,
     setEditingRowId(null);
   };
 
-  // Submit parsed batch to institutional database
+  // Commit valid/reviewed records
   const handleCommitToDatabase = () => {
     if (parsedRows.length === 0) return;
     setIsSubmitting(true);
@@ -284,340 +341,418 @@ Harshita Verma,491820481029,AI & Data Science,2025-26,General,Active,2025-08-11,
     setIsSubmitting(false);
   };
 
-  // Counts
-  const validCount = parsedRows.filter(r => r.validationStatus === 'valid').length;
-  const reviewCount = parsedRows.filter(r => r.validationStatus === 'review').length;
-  const errorCount = parsedRows.filter(r => r.validationStatus === 'error').length;
+  const validRows = parsedRows.filter(r => r.validationStatus === 'valid');
+  const issueRows = parsedRows.filter(r => r.validationStatus !== 'valid');
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            Batch Student Data Upload & Pre-Validation Engine
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Target Institution:{' '}
-            <span className="font-semibold text-slate-700">{currentInstitution.name}</span> · Real-time
-            duplicate & format inspection
-          </p>
-        </div>
+      {/* Page Header */}
+      <div className="pb-2 border-b border-slate-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+              Upload Student Data
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Upload your institution's student enrolment list using Excel or CSV format in three easy steps.
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={loadDemoFile}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Load Demo File (For Jury)</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 3-Step Visual Process Guide */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Step 1 */}
+        <div className="p-4 rounded-xl border border-slate-200/80 bg-white shadow-2xs space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono font-semibold tracking-wider text-slate-400 uppercase">
+              Phase 01
+            </span>
+            <FileSpreadsheet className="w-4 h-4 text-slate-500" />
+          </div>
+          <h3 className="font-bold text-xs text-slate-900">Download Excel Template</h3>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Standard AICTE enrolment spreadsheet format with all mandatory verification fields.
+          </p>
           <button
             onClick={downloadSampleCsvTemplate}
-            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            className={`w-full mt-1 py-1.5 px-3 text-xs font-semibold rounded-lg border flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+              theme === 'bharat-royal'
+                ? 'border-orange-500 text-orange-800 hover:bg-orange-50'
+                : theme === 'academic-emerald'
+                ? 'border-emerald-700 text-emerald-800 hover:bg-emerald-50'
+                : theme === 'digital-indigo'
+                ? 'border-indigo-600 text-indigo-800 hover:bg-indigo-50'
+                : 'border-slate-300 text-slate-800 hover:bg-slate-100'
+            }`}
           >
-            <Download className="w-3.5 h-3.5 text-teal-700" />
-            <span>Download CSV Template</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>Download Sample Template</span>
           </button>
+        </div>
 
+        {/* Step 2 */}
+        <div className="p-4 rounded-xl border border-slate-200/80 bg-white shadow-2xs space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono font-semibold tracking-wider text-slate-400 uppercase">
+              Phase 02
+            </span>
+            <UploadCloud className="w-4 h-4 text-slate-500" />
+          </div>
+          <h3 className="font-bold text-xs text-slate-900">Upload Completed File</h3>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Drag and drop or select your filled student enrolment Excel or CSV spreadsheet.
+          </p>
           <button
-            onClick={loadDemoBatch}
-            className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            onClick={() => fileInputRef.current?.click()}
+            className={`w-full mt-1 py-1.5 px-3 text-xs font-semibold rounded-lg text-white flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs ${
+              theme === 'bharat-royal'
+                ? 'bg-orange-600 hover:bg-orange-700'
+                : theme === 'academic-emerald'
+                ? 'bg-emerald-700 hover:bg-emerald-800'
+                : theme === 'digital-indigo'
+                ? 'bg-indigo-600 hover:bg-indigo-700'
+                : theme === 'executive-dark'
+                ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold'
+                : 'bg-slate-900 hover:bg-slate-800'
+            }`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Load Demo Batch</span>
+            <UploadCloud className="w-3.5 h-3.5" />
+            <span>Select Student File</span>
           </button>
         </div>
-      </div>
 
-      {/* Drag & Drop Upload Zone */}
-      <div
-        onDragEnter={() => setDragActive(true)}
-        onDragLeave={() => setDragActive(false)}
-        onDragOver={e => e.preventDefault()}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
-          dragActive
-            ? 'border-teal-500 bg-teal-50/50 scale-[1.005]'
-            : 'border-slate-300 hover:border-teal-500/80 bg-white hover:bg-slate-50/50'
-        }`}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv,.txt,.xlsx,.xls"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-
-        <div className="max-w-md mx-auto space-y-3">
-          <div className="w-12 h-12 rounded-full bg-teal-50 text-teal-700 flex items-center justify-center mx-auto">
-            <UploadCloud className="w-6 h-6" />
+        {/* Step 3 */}
+        <div className="p-4 rounded-xl border border-slate-200/80 bg-white shadow-2xs space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono font-semibold tracking-wider text-slate-400 uppercase">
+              Phase 03
+            </span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
-          <div>
-            <p className="text-sm font-bold text-slate-800">
-              Drag and drop student enrolment CSV or Excel file here
-            </p>
-            <p className="text-xs text-slate-500 mt-1">
-              Supports CSV, TSV, and tabular formats up to 5,000 student records per submission
-            </p>
-          </div>
-          <div className="inline-flex items-center gap-2 text-xs font-medium text-teal-700 bg-teal-50 px-3 py-1 rounded-full border border-teal-200">
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Browse local file</span>
+          <h3 className="font-bold text-xs text-slate-900">Level 1 Format Validation</h3>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Automatic real-time pre-flight verification with in-line correction workbench.
+          </p>
+          <div className="text-[10px] text-blue-700 font-semibold pt-1 flex items-center gap-1">
+            <Info className="w-3.5 h-3.5 text-blue-600" />
+            <span>Format Valid – Does not mean Officially Verified</span>
           </div>
         </div>
       </div>
 
-      {/* Success banner after submission */}
+      {/* Upload Drag & Drop Zone */}
+      {parsedRows.length === 0 && !uploadSuccessSummary && (
+        <div
+          onDragEnter={() => setDragActive(true)}
+          onDragLeave={() => setDragActive(false)}
+          onDragOver={e => e.preventDefault()}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${
+            dragActive
+              ? 'border-slate-800 bg-slate-50 scale-[1.005]'
+              : 'border-slate-200 hover:border-slate-400 bg-white hover:bg-slate-50/50'
+          }`}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.txt,.xlsx,.xls"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+
+          <div className="max-w-md mx-auto space-y-3">
+            <div className="w-11 h-11 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center mx-auto shadow-2xs">
+              <UploadCloud className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-900">
+                Drag and drop student enrolment roster here
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Supports CSV, XLS, XLSX formats. Or click anywhere in this area to browse disk.
+              </p>
+            </div>
+            <div className="pt-1">
+              <span className="text-xs font-semibold text-slate-700 border border-slate-200 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-lg inline-block transition-colors">
+                Browse Files
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Notification after committing */}
       {uploadSuccessSummary && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 flex items-center justify-between">
+        <div className="p-5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3">
             <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
             <div>
               <div className="font-bold text-sm">
-                Successfully committed {uploadSuccessSummary.added} student records!
+                Successfully Added {uploadSuccessSummary.added} Student Records to Database!
               </div>
-              <div className="text-xs text-emerald-700">
-                {uploadSuccessSummary.valid} valid records, {uploadSuccessSummary.review} flagged for review, and{' '}
-                {uploadSuccessSummary.error} records with validation alerts stored in registry.
+              <div className="text-xs text-emerald-800 mt-0.5">
+                {uploadSuccessSummary.valid} records verified successfully. Records requiring review can be managed in the Student Records tab.
               </div>
             </div>
           </div>
-          <button
-            onClick={() => setActiveTab('students')}
-            className="px-3.5 py-1.5 rounded-lg bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 flex items-center gap-1.5"
-          >
-            <span>View Student Registry</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setUploadSuccessSummary(null);
+                setParsedRows([]);
+              }}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-600 text-emerald-800 hover:bg-emerald-100"
+            >
+              Upload Another File
+            </button>
+            <button
+              onClick={() => setActiveTab('students')}
+              className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 flex items-center gap-1 shadow-2xs"
+            >
+              <span>View Student Records</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Parsed Preview Section */}
+      {/* Post-Upload Review & Correction Workspace */}
       {parsedRows.length > 0 && !uploadSuccessSummary && (
-        <div className="space-y-4">
-          {/* Summary KPI Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 rounded-lg border border-slate-200 bg-white shadow-2xs">
-              <span className="text-xs text-slate-500 font-medium">Total Rows Parsed</span>
-              <div className="text-xl font-bold font-mono text-slate-900 tabular-nums">{parsedRows.length}</div>
+        <div className="space-y-6">
+          {/* Summary Strip */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+              <span className="text-[11px] text-slate-500 font-semibold uppercase">Total Rows</span>
+              <div className="text-xl font-bold font-mono text-slate-900 mt-1 tabular-nums">{parsedRows.length}</div>
             </div>
 
-            <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50/50 shadow-2xs">
-              <div className="flex items-center gap-1.5 text-xs text-emerald-800 font-medium">
+            <div className="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200 shadow-2xs">
+              <span className="text-[11px] text-emerald-800 font-semibold uppercase flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Ready to Commit</span>
-              </div>
-              <div className="text-xl font-bold font-mono text-emerald-700 tabular-nums">{validCount}</div>
+                <span>Ready to Save</span>
+              </span>
+              <div className="text-xl font-bold font-mono text-emerald-700 mt-1 tabular-nums">{validRows.length}</div>
             </div>
 
-            <div className="p-3 rounded-lg border border-amber-200 bg-amber-50/50 shadow-2xs">
-              <div className="flex items-center gap-1.5 text-xs text-amber-800 font-medium">
+            <div className="bg-amber-50/60 p-3.5 rounded-xl border border-amber-200 shadow-2xs">
+              <span className="text-[11px] text-amber-800 font-semibold uppercase flex items-center gap-1">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                <span>Requires Review</span>
+                <span>Needs Review</span>
+              </span>
+              <div className="text-xl font-bold font-mono text-amber-700 mt-1 tabular-nums">
+                {parsedRows.filter(r => r.validationStatus === 'review').length}
               </div>
-              <div className="text-xl font-bold font-mono text-amber-700 tabular-nums">{reviewCount}</div>
             </div>
 
-            <div className="p-3 rounded-lg border border-rose-200 bg-rose-50/50 shadow-2xs">
-              <div className="flex items-center gap-1.5 text-xs text-rose-800 font-medium">
+            <div className="bg-rose-50/60 p-3.5 rounded-xl border border-rose-200 shadow-2xs">
+              <span className="text-[11px] text-rose-800 font-semibold uppercase flex items-center gap-1">
                 <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                <span>Errors Flagged</span>
+                <span>Needs Correction</span>
+              </span>
+              <div className="text-xl font-bold font-mono text-rose-700 mt-1 tabular-nums">
+                {parsedRows.filter(r => r.validationStatus === 'error').length}
               </div>
-              <div className="text-xl font-bold font-mono text-rose-700 tabular-nums">{errorCount}</div>
             </div>
           </div>
 
           {/* Action Row */}
-          <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
             <div className="text-xs text-slate-600">
-              File: <span className="font-semibold text-slate-900">{fileName}</span> ·{' '}
-              <span className="italic">Click any row below to edit and fix errors before committing.</span>
+              Uploaded File: <span className="font-bold text-slate-900">{fileName}</span>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setParsedRows([])}
-                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50"
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50"
               >
-                Clear File
+                Cancel & Upload New
               </button>
               <button
                 onClick={handleCommitToDatabase}
                 disabled={isSubmitting}
-                className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-teal-700 text-white hover:bg-teal-800 flex items-center gap-1.5 shadow-xs cursor-pointer"
+                className={`px-4 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer text-white ${
+                  theme === 'bharat-royal'
+                    ? 'bg-orange-600 hover:bg-orange-700'
+                    : theme === 'academic-emerald'
+                    ? 'bg-emerald-700 hover:bg-emerald-800'
+                    : theme === 'digital-indigo'
+                    ? 'bg-indigo-600 hover:bg-indigo-700'
+                    : theme === 'executive-dark'
+                    ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold'
+                    : 'bg-slate-900 hover:bg-slate-800'
+                }`}
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>Commit {parsedRows.length} Records to Database</span>
+                <span>Save All {parsedRows.length} Records to Database</span>
               </button>
             </div>
           </div>
 
-          {/* Pre-Validation Table with Inline Fixing */}
+          {/* Error Table per Section 5 Requirements */}
+          {issueRows.length > 0 && (
+            <div className="bg-white rounded-xl border border-rose-200 shadow-2xs overflow-hidden">
+              <div className="p-4 bg-rose-50/50 border-b border-rose-200 flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-sm text-rose-950 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    <span>Records That Need Correction Before Finalizing</span>
+                  </h3>
+                  <p className="text-xs text-rose-800 mt-0.5">
+                    Click "Correct Information" to fix student details right now without re-uploading the file.
+                  </p>
+                </div>
+                <span className="text-xs font-mono font-bold text-rose-800 bg-white px-2 py-0.5 rounded border border-rose-300">
+                  {issueRows.length} Issues Flagged
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold">
+                      <th className="py-2.5 px-3 w-14 text-center">Row</th>
+                      <th className="py-2.5 px-3">Student Name</th>
+                      <th className="py-2.5 px-3">Type of Issue</th>
+                      <th className="py-2.5 px-3">Explanation of Problem</th>
+                      <th className="py-2.5 px-3">Suggested Correction</th>
+                      <th className="py-2.5 px-3 text-right">Action to Correct</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {issueRows.map(row => {
+                      const isEditing = editingRowId === row.id;
+
+                      return (
+                        <tr key={row.id} className="hover:bg-rose-50/30 transition-colors">
+                          <td className="py-2.5 px-3 text-center font-mono text-slate-500 font-bold">
+                            #{row.rowNum}
+                          </td>
+
+                          <td className="py-2.5 px-3 font-semibold text-slate-900 whitespace-nowrap">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editFormData.name}
+                                onChange={e => setEditFormData({ ...editFormData, name: e.target.value })}
+                                className="p-1 border border-teal-600 rounded text-xs bg-white w-36"
+                              />
+                            ) : (
+                              row.name || <span className="text-rose-600 italic">Missing Name</span>
+                            )}
+                          </td>
+
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className="text-[11px] font-semibold text-rose-800 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                              {row.issueType}
+                            </span>
+                          </td>
+
+                          <td className="py-2.5 px-3 text-slate-700 text-[11px] max-w-xs">
+                            {row.issueExplanation}
+                          </td>
+
+                          <td className="py-2.5 px-3 text-slate-600 text-[11px] max-w-xs">
+                            {row.suggestedCorrection}
+                          </td>
+
+                          <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                            {isEditing ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <input
+                                  type="text"
+                                  placeholder="Correct APAAR ID"
+                                  maxLength={14}
+                                  value={editFormData.apaarId}
+                                  onChange={e => setEditFormData({ ...editFormData, apaarId: e.target.value })}
+                                  className="p-1 border border-teal-600 rounded text-xs font-mono bg-white w-32"
+                                />
+                                <button
+                                  onClick={() => saveEditRow(row.id)}
+                                  className="px-2 py-1 rounded bg-teal-700 text-white hover:bg-teal-800 font-semibold text-xs flex items-center gap-1"
+                                >
+                                  <Check className="w-3 h-3" />
+                                  <span>Apply</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => startEditRow(row)}
+                                className="px-2.5 py-1 rounded-lg border border-teal-700 text-teal-800 hover:bg-teal-50 font-semibold text-xs flex items-center gap-1 cursor-pointer"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                <span>Correct Information</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Clean Preview of All Uploaded Records */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto max-h-[460px]">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">
+                  Preview All Uploaded Records ({parsedRows.length})
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Verify the parsed rows before final submission to the student registry
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto max-h-60">
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold z-10">
+                <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 font-semibold text-slate-600">
                   <tr>
-                    <th className="py-2.5 px-3 w-12 text-center">Row</th>
-                    <th className="py-2.5 px-3">Student Name</th>
-                    <th className="py-2.5 px-3">APAAR ID</th>
-                    <th className="py-2.5 px-3">Department</th>
-                    <th className="py-2.5 px-3">Year</th>
-                    <th className="py-2.5 px-3">Category</th>
-                    <th className="py-2.5 px-3">Validation Status & Diagnostics</th>
-                    <th className="py-2.5 px-3 text-right">Edit</th>
+                    <th className="py-2 px-3">#</th>
+                    <th className="py-2 px-3">Student Name</th>
+                    <th className="py-2 px-3">APAAR ID</th>
+                    <th className="py-2 px-3">Department</th>
+                    <th className="py-2 px-3">Year</th>
+                    <th className="py-2 px-3">Verification Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {parsedRows.map(row => {
-                    const isEditingThis = editingRowId === row.id;
-
-                    return (
-                      <tr
-                        key={row.id}
-                        className={`transition-colors ${
-                          row.validationStatus === 'error'
-                            ? 'bg-rose-50/30 hover:bg-rose-50/50'
+                  {parsedRows.map(row => (
+                    <tr key={row.id} className="hover:bg-slate-50">
+                      <td className="py-2 px-3 font-mono text-slate-400">{row.rowNum}</td>
+                      <td className="py-2 px-3 font-semibold text-slate-900">{row.name || 'Missing'}</td>
+                      <td className="py-2 px-3 font-mono text-slate-700">{formatApaarId(row.apaarId) || 'Missing'}</td>
+                      <td className="py-2 px-3 text-slate-700">{row.department}</td>
+                      <td className="py-2 px-3 font-mono text-slate-600">{row.academicYear}</td>
+                      <td className="py-2 px-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                          row.validationStatus === 'valid'
+                            ? 'bg-emerald-50 text-emerald-800'
                             : row.validationStatus === 'review'
-                            ? 'bg-amber-50/20 hover:bg-amber-50/40'
-                            : 'hover:bg-slate-50/80'
-                        }`}
-                      >
-                        {/* Row Num */}
-                        <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
-                          {row.rowNum}
-                        </td>
-
-                        {/* Name */}
-                        <td className="py-2.5 px-3 font-semibold text-slate-900 whitespace-nowrap">
-                          {isEditingThis ? (
-                            <input
-                              type="text"
-                              value={row.name}
-                              onChange={e =>
-                                setParsedRows(prev =>
-                                  prev.map(r => (r.id === row.id ? { ...r, name: e.target.value } : r))
-                                )
-                              }
-                              className="p-1 border border-teal-500 rounded text-xs bg-white w-40"
-                            />
-                          ) : (
-                            row.name || <span className="text-rose-500 italic">Missing Name</span>
-                          )}
-                        </td>
-
-                        {/* APAAR ID */}
-                        <td className="py-2.5 px-3 font-mono font-medium tracking-wide whitespace-nowrap">
-                          {isEditingThis ? (
-                            <input
-                              type="text"
-                              value={row.apaarId}
-                              maxLength={14}
-                              onChange={e =>
-                                setParsedRows(prev =>
-                                  prev.map(r => (r.id === row.id ? { ...r, apaarId: e.target.value } : r))
-                                )
-                              }
-                              className="p-1 border border-teal-500 rounded text-xs bg-white w-36 font-mono"
-                            />
-                          ) : (
-                            formatApaarId(row.apaarId) || (
-                              <span className="text-rose-600 font-sans italic">Missing ID</span>
-                            )
-                          )}
-                        </td>
-
-                        {/* Department */}
-                        <td className="py-2.5 px-3 text-slate-700 whitespace-nowrap">
-                          {isEditingThis ? (
-                            <select
-                              value={row.department}
-                              onChange={e =>
-                                setParsedRows(prev =>
-                                  prev.map(r => (r.id === row.id ? { ...r, department: e.target.value } : r))
-                                )
-                              }
-                              className="p-1 border border-teal-500 rounded text-xs bg-white"
-                            >
-                              {currentInstitution.departments.map(d => (
-                                <option key={d.department} value={d.department}>
-                                  {d.department}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            row.department
-                          )}
-                        </td>
-
-                        {/* Academic Year */}
-                        <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600 whitespace-nowrap">
-                          {row.academicYear}
-                        </td>
-
-                        {/* Category */}
-                        <td className="py-2.5 px-3 whitespace-nowrap">
-                          <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px]">
-                            {row.admissionCategory}
-                          </span>
-                        </td>
-
-                        {/* Validation Status & Detailed diagnostics */}
-                        <td className="py-2.5 px-3">
-                          <div className="space-y-1">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
-                                row.validationStatus === 'valid'
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                  : row.validationStatus === 'review'
-                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                  : 'bg-rose-100 text-rose-800 border border-rose-200'
-                              }`}
-                            >
-                              {row.validationStatus === 'valid' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
-                              {row.validationStatus === 'review' && <AlertTriangle className="w-3 h-3 text-amber-600" />}
-                              {row.validationStatus === 'error' && <XCircle className="w-3 h-3 text-rose-600" />}
-                              <span>
-                                {row.validationStatus === 'valid'
-                                  ? 'Valid Record'
-                                  : row.validationStatus === 'review'
-                                  ? 'Review Required'
-                                  : 'Error Detected'}
-                              </span>
-                            </span>
-
-                            {row.errorMessages.length > 0 && (
-                              <div className="text-[11px] text-rose-700 space-y-0.5 leading-snug">
-                                {row.errorMessages.map((msg, i) => (
-                                  <div key={i} className="flex items-start gap-1">
-                                    <span className="text-slate-400">·</span>
-                                    <span>{msg}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Row Actions */}
-                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                          {isEditingThis ? (
-                            <button
-                              onClick={() => handleInlineSave(row.id, { name: row.name, apaarId: row.apaarId, department: row.department })}
-                              className="px-2 py-1 rounded bg-teal-700 text-white hover:bg-teal-800 flex items-center gap-1 font-semibold text-[11px]"
-                            >
-                              <Check className="w-3 h-3" />
-                              Save
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => setEditingRowId(row.id)}
-                              className="p-1 rounded text-slate-500 hover:text-teal-700 hover:bg-slate-100"
-                              title="Edit in place"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                            ? 'bg-amber-50 text-amber-800'
+                            : 'bg-rose-50 text-rose-800'
+                        }`}>
+                          {row.validationStatus === 'valid' ? 'Valid' : row.validationStatus === 'review' ? 'Review' : 'Error'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

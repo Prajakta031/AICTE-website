@@ -11,7 +11,10 @@ import {
   Filter,
   Eye,
   RefreshCw,
-  Info
+  Info,
+  ArrowRight,
+  Edit2,
+  Zap
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatApaarId } from '../../utils/validationEngine';
@@ -21,7 +24,7 @@ import { ValidationRuleId, Student } from '../../types';
 interface RuleCardProps {
   id: ValidationRuleId;
   title: string;
-  ruleNo: number;
+  checkNo: number;
   description: string;
   passedCount: number;
   flaggedCount: number;
@@ -29,9 +32,9 @@ interface RuleCardProps {
   onSelect: () => void;
 }
 
-const RuleCard: React.FC<RuleCardProps> = ({
+const SimpleCheckCard: React.FC<RuleCardProps> = ({
   title,
-  ruleNo,
+  checkNo,
   description,
   passedCount,
   flaggedCount,
@@ -42,31 +45,31 @@ const RuleCard: React.FC<RuleCardProps> = ({
     onClick={onSelect}
     className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
       isSelected
-        ? 'border-teal-600 bg-teal-50/40 shadow-xs ring-1 ring-teal-600'
+        ? 'border-teal-600 bg-teal-50/50 shadow-xs ring-1 ring-teal-600'
         : 'border-slate-200 bg-white hover:border-slate-300 shadow-2xs'
     }`}
   >
     <div className="flex items-center justify-between mb-2">
-      <span className="text-[10px] font-mono font-bold uppercase text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-        Rule 0{ruleNo}
+      <span className="text-[10px] font-mono font-bold uppercase text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+        Check #{checkNo}
       </span>
       {flaggedCount > 0 ? (
-        <span className="text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-          {flaggedCount} Flags
+        <span className="text-[11px] font-semibold text-rose-800 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+          {flaggedCount} Issues Found
         </span>
       ) : (
-        <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-          Pass
+        <span className="text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">
+          All Passed
         </span>
       )}
     </div>
-    <h4 className="font-bold text-xs text-slate-900 mb-1">{title}</h4>
-    <p className="text-[11px] text-slate-500 leading-snug line-clamp-2">{description}</p>
+    <h3 className="font-bold text-xs text-slate-900 mb-1">{title}</h3>
+    <p className="text-[11px] text-slate-500 leading-snug">{description}</p>
   </button>
 );
 
 export const ValidationReportsView: React.FC = () => {
-  const { students, currentUser, currentInstitution, setSelectedStudentForDetail, revalidateAll } = useApp();
+  const { students, currentUser, currentInstitution, setSelectedStudentForDetail, revalidateAll, setActiveTab } = useApp();
 
   const isAicte = currentUser.role === 'aicte_admin';
   const targetStudents = isAicte ? students : students.filter(s => s.institutionId === currentUser.institutionId);
@@ -75,49 +78,48 @@ export const ValidationReportsView: React.FC = () => {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'valid' | 'review' | 'error'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Rules definition
-  const rules = [
+  // 6 Checks in simple, familiar non-technical language (Per Section 4)
+  const checksList = [
     {
       id: 'RULE_MANDATORY_FIELDS' as ValidationRuleId,
-      ruleNo: 1,
-      title: 'Mandatory Student Profile Check',
-      description: 'Verifies presence of Student Name, APAAR ID, Department, Term, and Category.'
+      checkNo: 1,
+      title: 'Required Student Information',
+      description: 'Ensures student name, APAAR ID, branch, admission year, and category are not blank.'
     },
     {
       id: 'RULE_APAAR_FORMAT' as ValidationRuleId,
-      ruleNo: 2,
-      title: 'APAAR ID Format & Checksum',
-      description: 'Enforces 12-digit numeric constraint, checksum validity, and eliminates dummy sequences.'
+      checkNo: 2,
+      title: 'Student ID (APAAR ID) Format',
+      description: 'Checks that the ID is exactly 12 digits and not a dummy sequence like 000000000000.'
     },
     {
       id: 'RULE_LOCAL_DUPLICATE' as ValidationRuleId,
-      ruleNo: 3,
-      title: 'Intra-Institutional Duplicate Check',
-      description: 'Detects duplicate APAAR IDs registered within the same college campus.'
+      checkNo: 3,
+      title: 'Same-College Duplicate ID Check',
+      description: 'Finds if the same student ID was entered twice within your own institution.'
     },
     {
       id: 'RULE_CROSS_INSTITUTION_DUPLICATE' as ValidationRuleId,
-      ruleNo: 4,
-      title: 'Inter-Institutional Dual Enrolment',
-      description: 'Cross-references APAAR IDs across all AICTE institutions for concurrent active admissions.'
+      checkNo: 4,
+      title: 'Other Colleges Dual Admission Check',
+      description: 'Detects if the student ID is concurrently active in another AICTE-approved college.'
     },
     {
       id: 'RULE_INTAKE_LIMIT' as ValidationRuleId,
-      ruleNo: 5,
-      title: 'AICTE Approved Intake Audit',
-      description: 'Audits actual department enrolment counts against sanctioned statutory quotas.'
+      checkNo: 5,
+      title: 'Approved Seat Quota Audit',
+      description: 'Warns if total admissions in any department exceed the AICTE sanctioned intake.'
     },
     {
       id: 'RULE_INCONSISTENT_DATA' as ValidationRuleId,
-      ruleNo: 6,
-      title: 'Data Consistency & Integrity',
-      description: 'Checks admission year chronology, email formatting, and field correlation.'
+      checkNo: 6,
+      title: 'Information Consistency Check',
+      description: 'Verifies that admission dates correlate with academic years and email addresses are valid.'
     }
   ];
 
   // Filter students based on selected rule & status
   const filteredStudents = targetStudents.filter(student => {
-    // Search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().replace(/[\s-]/g, '');
       const matchName = student.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -125,12 +127,10 @@ export const ValidationReportsView: React.FC = () => {
       if (!matchName && !matchApaar) return false;
     }
 
-    // Status filter
     if (selectedStatusFilter !== 'all' && student.validationStatus !== selectedStatusFilter) {
       return false;
     }
 
-    // Rule filter
     if (selectedRule !== 'all') {
       const check = student.validationChecks?.find(c => c.ruleId === selectedRule);
       if (!check || check.passed) return false;
@@ -139,96 +139,121 @@ export const ValidationReportsView: React.FC = () => {
     return true;
   });
 
+  const totalValid = targetStudents.filter(s => s.validationStatus === 'valid').length;
+  const totalReview = targetStudents.filter(s => s.validationStatus === 'review').length;
+  const totalError = targetStudents.filter(s => s.validationStatus === 'error').length;
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              Automated Validation Engine Audit Reports
-            </h2>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-teal-100 text-teal-800">
-              6 Rules Engine
-            </span>
+      {/* Page Header */}
+      <div className="pb-2 border-b border-slate-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+                Data Verification
+              </h1>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200">
+                Check Student Information
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              The platform automatically verifies student records against standard AICTE criteria to identify errors and ensure compliance.
+            </p>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {isAicte
-              ? 'Consolidated national audit reports across all registered institutions'
-              : `${currentInstitution.name} · Rule-by-rule institutional verification ledger`}
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={revalidateAll}
-            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-teal-700" />
-            <span>Revalidate Now</span>
-          </button>
-          <button
-            onClick={triggerPrintReport}
-            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-          >
-            <Printer className="w-3.5 h-3.5 text-slate-600" />
-            <span>Print Dossier</span>
-          </button>
-          <button
-            onClick={() => exportStudentsToCsv(filteredStudents, 'AICTE_Validation_Audit_Report.csv')}
-            className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-teal-700 hover:bg-teal-800 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export Audit CSV</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={revalidateAll}
+              className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-teal-700 hover:bg-teal-800 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Check Records Now</span>
+            </button>
+            <button
+              onClick={() => exportStudentsToCsv(filteredStudents, 'Student_Verification_Audit.csv')}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-600" />
+              <span>Download Report</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Mandatory Regulatory Disclaimer */}
-      <div className="p-3.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-start gap-2.5">
+      {/* Helpful Non-Technical Explanation Box */}
+      <div className="p-3.5 rounded-xl bg-blue-50/80 border border-blue-200/80 text-blue-900 text-xs flex items-start gap-2.5">
         <Info className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
-        <div className="space-y-0.5">
-          <span className="font-bold">Standard AICTE SIH26263 Compliance Protocol:</span>
-          <p className="text-blue-800 text-[11px] leading-relaxed">
-            Format validation and duplicate matches generated by this automated platform are rule-based institutional filters. Potential violations and cross-institution conflicts are flagged for administrative human review and do not constitute automatic punitive disqualifications.
+        <div>
+          <span className="font-semibold text-blue-900">How do the verification checks work?</span>
+          <p className="text-blue-800 text-[11px] mt-0.5 leading-relaxed">
+            Records marked in <span className="font-semibold text-emerald-800">Green</span> are fully valid. Records in <span className="font-semibold text-amber-800">Orange</span> require administrative review (e.g., dual college enrolment). Records in <span className="font-semibold text-rose-800">Red</span> have errors that must be corrected before final AICTE approval.
           </p>
         </div>
       </div>
 
-      {/* 6 Rule Grid */}
+      {/* Live Verification API Banner */}
+      <div className="p-3.5 rounded-xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-700/40 text-white text-xs flex items-center justify-between flex-wrap gap-3 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-amber-400">
+            <Zap className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-white">Live Verification API Connected</span>
+              <span className="font-mono text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-400/30 font-bold">
+                POST /api/demo/verify
+              </span>
+            </div>
+            <p className="text-slate-300 text-[11px] mt-0.5">
+              Live automated endpoint for AICTE compliance, cross-college duplicate checks, and instant APAAR verification.
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setActiveTab('api-verifier')}
+          className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+        >
+          <span>Open API Sandbox & Inspector</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* 6 Simple Verification Check Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {rules.map(rule => {
+        {checksList.map(item => {
           const flaggedCount = targetStudents.filter(s => {
-            const check = s.validationChecks?.find(c => c.ruleId === rule.id);
+            const check = s.validationChecks?.find(c => c.ruleId === item.id);
             return check && !check.passed;
           }).length;
 
           const passedCount = targetStudents.length - flaggedCount;
 
           return (
-            <RuleCard
-              key={rule.id}
-              id={rule.id}
-              ruleNo={rule.ruleNo}
-              title={rule.title}
-              description={rule.description}
+            <SimpleCheckCard
+              key={item.id}
+              id={item.id}
+              checkNo={item.checkNo}
+              title={item.title}
+              description={item.description}
               passedCount={passedCount}
               flaggedCount={flaggedCount}
-              isSelected={selectedRule === rule.id}
-              onSelect={() => setSelectedRule(selectedRule === rule.id ? 'all' : rule.id)}
+              isSelected={selectedRule === item.id}
+              onSelect={() => setSelectedRule(selectedRule === item.id ? 'all' : item.id)}
             />
           );
         })}
       </div>
 
-      {/* Filter and Search Bar */}
+      {/* Search and Status Filter */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="relative w-full sm:w-80">
             <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
             <input
               type="text"
-              placeholder="Search flagged records..."
+              placeholder="Search by student name or APAAR ID..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full text-xs pl-9 pr-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500"
@@ -236,40 +261,47 @@ export const ValidationReportsView: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <span className="text-xs text-slate-500 whitespace-nowrap">Status:</span>
+            <span className="text-xs text-slate-500 whitespace-nowrap">Filter:</span>
             <select
               value={selectedStatusFilter}
               onChange={e => setSelectedStatusFilter(e.target.value as any)}
               className="text-xs p-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
             >
-              <option value="all">All Validation Statuses</option>
-              <option value="valid">🟢 Valid Records</option>
-              <option value="review">🟡 Requires Review</option>
-              <option value="error">🔴 Error Detected</option>
+              <option value="all">All Verification Statuses</option>
+              <option value="valid">🟢 Valid Records Only ({totalValid})</option>
+              <option value="review">🟡 Needs Review Only ({totalReview})</option>
+              <option value="error">🔴 Needs Correction Only ({totalError})</option>
             </select>
 
             {selectedRule !== 'all' && (
               <button
                 onClick={() => setSelectedRule('all')}
-                className="text-xs font-semibold text-teal-700 hover:text-teal-900 px-2 py-1"
+                className="text-xs font-semibold text-teal-700 hover:text-teal-900 px-2 py-1 cursor-pointer"
               >
-                Clear Rule Filter
+                Clear Check Filter
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* Validation Results Audit Table */}
+      {/* Results Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
         <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-          <div className="font-bold text-sm text-slate-900">
-            Audit Records ({filteredStudents.length} entries matching criteria)
+          <div>
+            <h3 className="font-bold text-sm text-slate-900">
+              Verification Results ({filteredStudents.length} Records)
+            </h3>
+            <p className="text-xs text-slate-500">
+              Click any row to inspect the student's APAAR card and check details
+            </p>
           </div>
-          <div className="flex items-center gap-4 text-xs font-mono">
-            <span className="text-emerald-700">Valid: {targetStudents.filter(s => s.validationStatus === 'valid').length}</span>
-            <span className="text-amber-700">Review: {targetStudents.filter(s => s.validationStatus === 'review').length}</span>
-            <span className="text-rose-700">Error: {targetStudents.filter(s => s.validationStatus === 'error').length}</span>
+          <div className="flex items-center gap-3 text-xs font-mono">
+            <span className="text-emerald-700 font-semibold">{totalValid} Valid</span>
+            <span className="text-slate-300">·</span>
+            <span className="text-amber-700 font-semibold">{totalReview} Review</span>
+            <span className="text-slate-300">·</span>
+            <span className="text-rose-700 font-semibold">{totalError} Error</span>
           </div>
         </div>
 
@@ -281,7 +313,7 @@ export const ValidationReportsView: React.FC = () => {
                 <th className="py-3 px-4">APAAR ID</th>
                 <th className="py-3 px-4">Department & Year</th>
                 <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Validation Audit Details</th>
+                <th className="py-3 px-4">Verification Findings</th>
                 <th className="py-3 px-4 text-right">Action</th>
               </tr>
             </thead>
@@ -289,18 +321,18 @@ export const ValidationReportsView: React.FC = () => {
               {filteredStudents.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400">
-                    No student records matching current audit criteria.
+                    No student records match the selected filter.
                   </td>
                 </tr>
               ) : (
                 filteredStudents.map(stu => {
-                  const failedChecks = stu.validationChecks?.filter(c => !c.passed) || [];
+                  const failed = stu.validationChecks?.filter(c => !c.passed) || [];
 
                   return (
                     <tr
                       key={stu.id}
-                      className="hover:bg-slate-50/80 transition-colors cursor-pointer"
                       onClick={() => setSelectedStudentForDetail(stu)}
+                      className="hover:bg-slate-50/80 transition-colors cursor-pointer"
                     >
                       <td className="py-3 px-4 font-semibold text-slate-900 whitespace-nowrap">
                         {stu.name}
@@ -310,52 +342,34 @@ export const ValidationReportsView: React.FC = () => {
                       </td>
 
                       <td className="py-3 px-4 font-mono font-medium text-slate-700 whitespace-nowrap">
-                        {formatApaarId(stu.apaarId) || (
-                          <span className="text-rose-500 italic font-sans">Missing</span>
-                        )}
+                        {formatApaarId(stu.apaarId) || <span className="text-rose-500 italic">Missing ID</span>}
                       </td>
 
-                      <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
+                      <td className="py-3 px-4 text-slate-700 whitespace-nowrap">
                         <span className="font-medium text-slate-800">{stu.department}</span>
                         <span className="text-[11px] text-slate-400 block font-mono">{stu.academicYear}</span>
                       </td>
 
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold ${
-                            stu.validationStatus === 'valid'
-                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                              : stu.validationStatus === 'review'
-                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                              : 'bg-rose-50 text-rose-800 border border-rose-200'
-                          }`}
-                        >
-                          {stu.validationStatus === 'valid' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
-                          {stu.validationStatus === 'review' && <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />}
-                          {stu.validationStatus === 'error' && <XCircle className="w-3.5 h-3.5 text-rose-600" />}
-                          <span>
-                            {stu.validationStatus === 'valid'
-                              ? 'Valid'
-                              : stu.validationStatus === 'review'
-                              ? 'Review Required'
-                              : 'Error Detected'}
-                          </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                          stu.validationStatus === 'valid'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : stu.validationStatus === 'review'
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                            : 'bg-rose-50 text-rose-800 border border-rose-200'
+                        }`}>
+                          {stu.validationStatus === 'valid' ? 'Valid Record' : stu.validationStatus === 'review' ? 'Needs Review' : 'Needs Correction'}
                         </span>
                       </td>
 
-                      <td className="py-3 px-4 max-w-md">
-                        {failedChecks.length > 0 ? (
-                          <div className="space-y-1">
-                            {failedChecks.map((check, i) => (
-                              <div key={i} className="text-[11px] text-rose-700 flex items-start gap-1">
-                                <span className="font-bold text-slate-500 font-mono text-[10px]">{check.ruleId}:</span>
-                                <span>{check.message}</span>
-                              </div>
-                            ))}
-                          </div>
+                      <td className="py-3 px-4 text-[11px] text-slate-600 max-w-sm">
+                        {failed.length > 0 ? (
+                          <span className="text-rose-700 font-medium">
+                            {failed[0].message}
+                          </span>
                         ) : (
-                          <span className="text-[11px] text-emerald-700">
-                            All 6 validation rules passed successfully.
+                          <span className="text-emerald-700">
+                            Passed all 6 verification checks.
                           </span>
                         )}
                       </td>
@@ -363,10 +377,10 @@ export const ValidationReportsView: React.FC = () => {
                       <td className="py-3 px-4 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
                         <button
                           onClick={() => setSelectedStudentForDetail(stu)}
-                          className="px-2.5 py-1 text-xs font-semibold rounded text-teal-700 bg-teal-50 hover:bg-teal-100 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                          className="px-2.5 py-1 text-xs font-semibold rounded text-teal-800 bg-teal-50 hover:bg-teal-100 transition-colors inline-flex items-center gap-1 cursor-pointer"
                         >
                           <Eye className="w-3 h-3" />
-                          <span>Inspect</span>
+                          <span>View Details</span>
                         </button>
                       </td>
                     </tr>

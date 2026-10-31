@@ -5,7 +5,10 @@ import {
   Student,
   NotificationAlert,
   CorrectionRequest,
-  UserRole
+  UserRole,
+  AppTheme,
+  ThemeDefinition,
+  AVAILABLE_THEMES
 } from '../types';
 import {
   INITIAL_INSTITUTIONS,
@@ -14,7 +17,21 @@ import {
   INITIAL_CORRECTIONS,
   DEMO_USERS
 } from '../data/mockData';
-import { validateStudentData, normalizeApaarId } from '../utils/validationEngine';
+import {
+  validateStudentData,
+  normalizeApaarId,
+  validateApaarFormatLevel1,
+  compareStudentWithDocument,
+  Level1ValidationResult,
+  DocumentComparisonOutcome,
+  DocumentComparisonInput
+} from '../utils/validationEngine';
+import {
+  verifyViaOfficialGateway,
+  runDemoSimulation,
+  OfficialVerificationResult,
+  OFFICIAL_API_CONFIG
+} from '../services/apaarApiService';
 
 interface AppContextType {
   currentUser: User;
@@ -27,6 +44,18 @@ interface AppContextType {
   setActiveTab: (tab: string) => void;
   selectedStudentForDetail: Student | null;
   setSelectedStudentForDetail: (student: Student | null) => void;
+
+  // Theme
+  theme: AppTheme;
+  setTheme: (theme: AppTheme) => void;
+  availableThemes: ThemeDefinition[];
+
+  // 3-Level Verification Actions
+  verifyStudentLevel1: (studentId: string) => Level1ValidationResult;
+  compareStudentDocument: (studentId: string, input: Omit<DocumentComparisonInput, 'student'>) => DocumentComparisonOutcome;
+  markStudentManualReview: (studentId: string, reason: string) => void;
+  requestOfficialVerification: (studentId: string) => Promise<OfficialVerificationResult>;
+  runDemoSimulationVerification: (studentId: string) => Promise<OfficialVerificationResult>;
 
   // Actions
   switchRole: (role: UserRole, institutionId?: string) => void;
@@ -42,6 +71,7 @@ interface AppContextType {
   revalidateAll: () => void;
   resetAllData: () => void;
 }
+
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -72,10 +102,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : DEMO_USERS[0]; // Default to College Admin (DTU)
   });
 
+  const [theme, setTheme] = useState<AppTheme>(() => {
+    const saved = localStorage.getItem('apaar_theme') as AppTheme;
+    if (saved && ['bharat-royal', 'digital-indigo', 'academic-emerald', 'minimal-slate', 'executive-dark'].includes(saved)) {
+      return saved;
+    }
+    return 'bharat-royal';
+  });
+
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedStudentForDetail, setSelectedStudentForDetail] = useState<Student | null>(null);
 
+  // Sync theme
+  useEffect(() => {
+    localStorage.setItem('apaar_theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'executive-dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
   // Sync to localStorage
+
   useEffect(() => {
     localStorage.setItem('apaar_institutions', JSON.stringify(institutions));
   }, [institutions]);
@@ -130,6 +180,143 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  // LEVEL 1: Format & Duplicate Verification
+  const verifyStudentLevel1 = (studentId: string): Level1ValidationResult => {
+    const target = students.find(s => s.id === studentId);
+    if (!target) {
+      return {
+        passed: false,
+        status: 'invalid_format',
+        statusLabel: 'Invalid Format',
+        errors: ['Student record not found in registry'],
+        notes: 'Record missing',
+        isDuplicate: false,
+        disclaimer: 'Format Check Failed.'
+      };
+    }
+
+    const result = validateApaarFormatLevel1(
+      target.apaarId,
+      target.id,
+      target.institutionId,
+      students
+    );
+
+    const now = new Date().toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    updateStudent(studentId, {
+      apaarStatus: result.status,
+      verificationLevel: 1,
+      verificationSource: 'Level 1 Algorithmic Regex & Duplicate Scanner',
+      verificationDate: now
+    });
+
+    return result;
+  };
+
+  // LEVEL 2: Document-Based Comparison (DigiLocker / Card)
+  const compareStudentDocument = (
+    studentId: string,
+    input: Omit<DocumentComparisonInput, 'student'>
+  ): DocumentComparisonOutcome => {
+    const target = students.find(s => s.id === studentId);
+    if (!target) {
+      throw new Error(`Student ${studentId} not found`);
+    }
+
+    const outcome = compareStudentWithDocument({
+      ...input,
+      student: target
+    });
+
+    const now = new Date().toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    updateStudent(studentId, {
+      apaarStatus: outcome.status,
+      verificationLevel: 2,
+      verificationSource: `Level 2 ${input.documentType || 'DigiLocker'} OCR Comparison`,
+      verificationDate: now,
+      documentRecord: outcome.record
+    });
+
+    return outcome;
+  };
+
+  // LEVEL 2: Manual Review Tag
+  const markStudentManualReview = (studentId: string, reason: string) => {
+    const now = new Date().toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    updateStudent(studentId, {
+      apaarStatus: 'manual_review',
+      verificationLevel: 2,
+      verificationSource: 'Institutional Manual Review (Authorized Officer)',
+      verificationDate: now,
+      flagNotes: `Manual Review: ${reason}`
+    });
+  };
+
+  // LEVEL 3: Official Government Gateway Check (Honest, un-faked)
+  const requestOfficialVerification = async (
+    studentId: string
+  ): Promise<OfficialVerificationResult> => {
+    const target = students.find(s => s.id === studentId);
+    if (!target) {
+      throw new Error(`Student ${studentId} not found`);
+    }
+
+    const res = await verifyViaOfficialGateway(target);
+
+    updateStudent(studentId, {
+      apaarStatus: 'pending_official',
+      verificationLevel: 3,
+      verificationSource: res.verificationSource,
+      verificationDate: res.verifiedAt,
+      officialApiStatus: 'pending_access'
+    });
+
+    return res;
+  };
+
+  // LEVEL 3: Sandbox Demo Simulation (Explicitly labeled "Demo Simulation – Not Official")
+  const runDemoSimulationVerification = async (
+    studentId: string
+  ): Promise<OfficialVerificationResult> => {
+    const target = students.find(s => s.id === studentId);
+    if (!target) {
+      throw new Error(`Student ${studentId} not found`);
+    }
+
+    const res = await runDemoSimulation(target);
+
+    updateStudent(studentId, {
+      apaarStatus: res.status,
+      verificationLevel: 3,
+      verificationSource: res.verificationSource,
+      verificationDate: res.verifiedAt,
+      officialApiStatus: 'demo_simulation'
+    });
+
+    return res;
+  };
+
   // Add single student with validation
   const addStudent = (data: Partial<Student>): Student => {
     const newId = `stu-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -166,6 +353,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     studentCandidate.validationChecks = engineRes.validationChecks;
     studentCandidate.flagNotes = engineRes.flagNotes;
     studentCandidate.crossInstitutionConflict = engineRes.crossInstitutionConflict;
+
+    // Run Level 1 APAAR check
+    const l1 = validateApaarFormatLevel1(studentCandidate.apaarId, newId, instId, students);
+    studentCandidate.apaarStatus = l1.status;
+    studentCandidate.verificationLevel = 1;
+    studentCandidate.verificationSource = 'Level 1 Algorithmic Regex & Duplicate Scanner';
+    studentCandidate.verificationDate = new Date().toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    studentCandidate.officialApiStatus = 'pending_access';
 
     setStudents(prev => [studentCandidate, ...prev]);
 
@@ -217,6 +418,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         merged.validationChecks = engineRes.validationChecks;
         merged.flagNotes = engineRes.flagNotes;
         merged.crossInstitutionConflict = engineRes.crossInstitutionConflict;
+
+        // If apaarId changed or unassigned status, run level 1
+        if (!merged.apaarStatus || updatedFields.apaarId !== undefined) {
+          const l1 = validateApaarFormatLevel1(merged.apaarId, merged.id, merged.institutionId, otherStudents);
+          merged.apaarStatus = l1.status;
+          merged.verificationLevel = 1;
+          merged.verificationSource = 'Level 1 Algorithmic Regex & Duplicate Scanner';
+          merged.verificationDate = new Date().toLocaleString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        }
 
         updatedStudent = merged;
         return merged;
@@ -285,6 +501,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       tempCandidate.validationChecks = res.validationChecks;
       tempCandidate.flagNotes = res.flagNotes;
       tempCandidate.crossInstitutionConflict = res.crossInstitutionConflict;
+
+      const l1 = validateApaarFormatLevel1(tempCandidate.apaarId, studentId, instId, students);
+      tempCandidate.apaarStatus = l1.status;
+      tempCandidate.verificationLevel = 1;
+      tempCandidate.verificationSource = 'Level 1 Batch Upload Format Validator';
+      tempCandidate.verificationDate = new Date().toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      tempCandidate.officialApiStatus = 'pending_access';
 
       if (res.validationStatus === 'valid') validCount++;
       else if (res.validationStatus === 'review') reviewCount++;
@@ -403,6 +632,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveTab,
         selectedStudentForDetail,
         setSelectedStudentForDetail,
+        theme,
+        setTheme,
+        availableThemes: AVAILABLE_THEMES,
+        verifyStudentLevel1,
+        compareStudentDocument,
+        markStudentManualReview,
+        requestOfficialVerification,
+        runDemoSimulationVerification,
         switchRole,
         switchInstitution,
         addStudent,

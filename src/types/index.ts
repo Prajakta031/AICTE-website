@@ -32,6 +32,35 @@ export interface Institution {
 
 export type ValidationStatus = 'valid' | 'review' | 'error';
 
+/**
+ * Standardized 3-Level APAAR Verification Statuses
+ * Strictly delineates format check, document comparison, and government API status
+ */
+export type ApaarVerificationStatus =
+  | 'invalid_format'
+  | 'format_valid'
+  | 'document_matched'
+  | 'document_mismatch'
+  | 'duplicate_detected'
+  | 'manual_review'
+  | 'pending_official'
+  | 'officially_verified'
+  | 'demo_simulation';
+
+export interface DocumentComparisonRecord {
+  fileName: string;
+  fileSize?: number;
+  uploadedAt: string;
+  documentType: 'DigiLocker APAAR Card' | 'ABC Issued Certificate' | 'Scanned Copy';
+  extractedName?: string;
+  extractedApaarId?: string;
+  nameMatch: boolean;
+  apaarMatch: boolean;
+  ocrConfidence: number;
+  status: 'matched' | 'mismatch' | 'unreadable';
+  remarks?: string;
+}
+
 export type ValidationRuleId =
   | 'RULE_MANDATORY_FIELDS'
   | 'RULE_APAAR_FORMAT'
@@ -74,6 +103,26 @@ export interface Student {
   validationChecks: ValidationCheck[];
   flagNotes?: string;
   crossInstitutionConflict?: CrossInstitutionConflict;
+
+  // Level 1-3 Verification Fields
+  apaarStatus?: ApaarVerificationStatus;
+  verificationLevel?: 1 | 2 | 3;
+  verificationSource?: string;
+  verificationDate?: string;
+  documentRecord?: DocumentComparisonRecord;
+  officialApiStatus?: 'not_configured' | 'pending_access' | 'demo_simulation' | 'officially_verified';
+}
+
+export interface VerificationBreakdown {
+  total: number;
+  formatValid: number;
+  documentMatched: number;
+  documentMismatch: number;
+  duplicateDetected: number;
+  manualReview: number;
+  pendingOfficial: number;
+  officiallyVerified: number;
+  demoSimulated: number;
 }
 
 export interface NotificationAlert {
@@ -124,3 +173,82 @@ export interface BatchUploadRow {
   hasReview: boolean;
   errorMessages: string[];
 }
+
+export type AppTheme =
+  | 'bharat-royal'
+  | 'digital-indigo'
+  | 'academic-emerald'
+  | 'minimal-slate'
+  | 'executive-dark';
+
+export interface ThemeDefinition {
+  id: AppTheme;
+  name: string;
+  tagline: string;
+  flagEmoji: string;
+  previewColors: {
+    primary: string;
+    accent: string;
+    bg: string;
+  };
+}
+
+export const AVAILABLE_THEMES: ThemeDefinition[] = [
+  {
+    id: 'bharat-royal',
+    name: 'Bharat Royal',
+    tagline: 'National AICTE Royal Navy with Saffron & Emerald',
+    flagEmoji: '🇮🇳',
+    previewColors: {
+      primary: '#0B192C',
+      accent: '#EA580C',
+      bg: '#F8FAFC'
+    }
+  },
+  {
+    id: 'digital-indigo',
+    name: 'Digital India',
+    tagline: 'Modern Tech Indigo with Vibrant Sky Blue',
+    flagEmoji: '🔷',
+    previewColors: {
+      primary: '#1E1B4B',
+      accent: '#0284C7',
+      bg: '#F8FAFC'
+    }
+  },
+  {
+    id: 'academic-emerald',
+    name: 'Academic Emerald',
+    tagline: 'Prestigious Campus Deep Green & Warm Gold',
+    flagEmoji: '🌲',
+    previewColors: {
+      primary: '#064E3B',
+      accent: '#D97706',
+      bg: '#F6FAF7'
+    }
+  },
+  {
+    id: 'minimal-slate',
+    name: 'Minimalist Slate',
+    tagline: 'Clean Corporate Steel & Blue with High Clarity',
+    flagEmoji: '⚙️',
+    previewColors: {
+      primary: '#1E293B',
+      accent: '#2563EB',
+      bg: '#F8FAFC'
+    }
+  },
+  {
+    id: 'executive-dark',
+    name: 'Executive Midnight',
+    tagline: 'High-Contrast Dark Command Center with Gold Accents',
+    flagEmoji: '🌙',
+    previewColors: {
+      primary: '#0F172A',
+      accent: '#F59E0B',
+      bg: '#090D16'
+    }
+  }
+];
+
+

@@ -8,6 +8,169 @@
   }
 }
 
+/* ============================================================
+   APAAR PLATFORM THEME ARCHITECTURE (SIH 2026)
+   ============================================================ */
+
+/* 1. BHARAT ROYAL (DEFAULT - National AICTE Theme: Saffron, Navy & Emerald) */
+:root,
+[data-theme="bharat-royal"] {
+  --theme-primary: #0b192c;
+  --theme-primary-hover: #172554;
+  --theme-primary-text: #ffffff;
+  --theme-accent: #ea580c;
+  --theme-accent-hover: #c2410c;
+  --theme-accent-light: #fff7ed;
+  --theme-accent-text: #9a3412;
+  --theme-secondary: #059669;
+  --theme-gold: #d97706;
+  --theme-page-bg: #f8fafc;
+  --theme-card-bg: #ffffff;
+  --theme-card-border: #e2e8f0;
+  --theme-text-main: #0f172a;
+  --theme-text-sub: #64748b;
+  --theme-topbar-bg: #0b192c;
+  --theme-topbar-border: #1e293b;
+  --theme-nav-active-bg: #fff7ed;
+  --theme-nav-active-text: #9a3412;
+  --theme-nav-active-border: #fed7aa;
+  --theme-nav-active-icon: #ea580c;
+  --theme-badge-glow: rgba(234, 88, 12, 0.15);
+}
+
+/* 2. DIGITAL INDIA (Tech Indigo & Sky Cyan) */
+[data-theme="digital-indigo"] {
+  --theme-primary: #1e1b4b;
+  --theme-primary-hover: #312e81;
+  --theme-primary-text: #ffffff;
+  --theme-accent: #0284c7;
+  --theme-accent-hover: #0369a1;
+  --theme-accent-light: #f0f9ff;
+  --theme-accent-text: #075985;
+  --theme-secondary: #0d9488;
+  --theme-gold: #eab308;
+  --theme-page-bg: #f8fafc;
+  --theme-card-bg: #ffffff;
+  --theme-card-border: #e2e8f0;
+  --theme-text-main: #0f172a;
+  --theme-text-sub: #64748b;
+  --theme-topbar-bg: #111827;
+  --theme-topbar-border: #1f2937;
+  --theme-nav-active-bg: #eff6ff;
+  --theme-nav-active-text: #1d4ed8;
+  --theme-nav-active-border: #bfdbfe;
+  --theme-nav-active-icon: #2563eb;
+  --theme-badge-glow: rgba(2, 132, 199, 0.15);
+}
+
+/* 3. ACADEMIC EMERALD (Campus Forest Green & Ochre Gold) */
+[data-theme="academic-emerald"] {
+  --theme-primary: #064e3b;
+  --theme-primary-hover: #065f46;
+  --theme-primary-text: #ffffff;
+  --theme-accent: #d97706;
+  --theme-accent-hover: #b45309;
+  --theme-accent-light: #fef3c7;
+  --theme-accent-text: #92400e;
+  --theme-secondary: #059669;
+  --theme-gold: #f59e0b;
+  --theme-page-bg: #f6faf7;
+  --theme-card-bg: #ffffff;
+  --theme-card-border: #d1fae5;
+  --theme-text-main: #06281e;
+  --theme-text-sub: #475569;
+  --theme-topbar-bg: #022c22;
+  --theme-topbar-border: #064e3b;
+  --theme-nav-active-bg: #ecfdf5;
+  --theme-nav-active-text: #065f46;
+  --theme-nav-active-border: #a7f3d0;
+  --theme-nav-active-icon: #059669;
+  --theme-badge-glow: rgba(5, 150, 105, 0.15);
+}
+
+/* 4. MINIMALIST SLATE (Industrial Steel & Crisp Cobalt) */
+[data-theme="minimal-slate"] {
+  --theme-primary: #1e293b;
+  --theme-primary-hover: #0f172a;
+  --theme-primary-text: #ffffff;
+  --theme-accent: #2563eb;
+  --theme-accent-hover: #1d4ed8;
+  --theme-accent-light: #eff6ff;
+  --theme-accent-text: #1e40af;
+  --theme-secondary: #10b981;
+  --theme-gold: #f59e0b;
+  --theme-page-bg: #f8fafc;
+  --theme-card-bg: #ffffff;
+  --theme-card-border: #e2e8f0;
+  --theme-text-main: #0f172a;
+  --theme-text-sub: #64748b;
+  --theme-topbar-bg: #0f172a;
+  --theme-topbar-border: #334155;
+  --theme-nav-active-bg: #f1f5f9;
+  --theme-nav-active-text: #0f172a;
+  --theme-nav-active-border: #cbd5e1;
+  --theme-nav-active-icon: #2563eb;
+  --theme-badge-glow: rgba(37, 99, 235, 0.15);
+}
+
+/* 5. EXECUTIVE MIDNIGHT (Dark Command Center) */
+[data-theme="executive-dark"] {
+  --theme-primary: #0f172a;
+  --theme-primary-hover: #1e293b;
+  --theme-primary-text: #f8fafc;
+  --theme-accent: #f59e0b;
+  --theme-accent-hover: #d97706;
+  --theme-accent-light: #291804;
+  --theme-accent-text: #fde68a;
+  --theme-secondary: #10b981;
+  --theme-gold: #fbbf24;
+  --theme-page-bg: #090d16;
+  --theme-card-bg: #111827;
+  --theme-card-border: #1f2937;
+  --theme-text-main: #f8fafc;
+  --theme-text-sub: #94a3b8;
+  --theme-topbar-bg: #030712;
+  --theme-topbar-border: #1f2937;
+  --theme-nav-active-bg: #1e293b;
+  --theme-nav-active-text: #fbbf24;
+  --theme-nav-active-border: #d97706;
+  --theme-nav-active-icon: #f59e0b;
+  --theme-badge-glow: rgba(245, 158, 11, 0.2);
+}
+
+/* Dark mode overrides for cards & text when executive-dark is active */
+[data-theme="executive-dark"] .bg-white {
+  background-color: #111827 !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="executive-dark"] .bg-slate-50 {
+  background-color: #0b1120 !important;
+}
+
+[data-theme="executive-dark"] .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+[data-theme="executive-dark"] .border-slate-200,
+[data-theme="executive-dark"] .border-slate-300 {
+  border-color: #1f2937 !important;
+}
+
+[data-theme="executive-dark"] .text-slate-900,
+[data-theme="executive-dark"] .text-slate-800 {
+  color: #f8fafc !important;
+}
+
+[data-theme="executive-dark"] .text-slate-700,
+[data-theme="executive-dark"] .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="executive-dark"] .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
 /* Custom styling for print-ready AICTE official reports */
 @media print {
   body {

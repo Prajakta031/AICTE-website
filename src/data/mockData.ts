@@ -101,7 +101,7 @@ export const INITIAL_INSTITUTIONS: Institution[] = [
 ];
 
 export const INITIAL_STUDENTS: Student[] = [
-  // DTU Students (mix of valid, review, and error)
+  // DTU Students (Diverse mix of Level 1, 2, and 3 verification states)
   {
     id: 'stu-dtu-001',
     name: 'Aarav Devendra Sharma',
@@ -116,6 +116,11 @@ export const INITIAL_STUDENTS: Student[] = [
     gender: 'Male',
     email: 'aarav.sharma@dtu.ac.in',
     validationStatus: 'valid',
+    apaarStatus: 'format_valid',
+    verificationLevel: 1,
+    verificationSource: 'Level 1 Algorithmic Regex & Duplicate Scanner',
+    verificationDate: '2026-10-24 10:15 AM',
+    officialApiStatus: 'pending_access',
     validationChecks: [
       { ruleId: 'RULE_MANDATORY_FIELDS', name: 'Mandatory Fields Check', passed: true, severity: 'success', message: 'All mandatory student profile fields are present.' },
       { ruleId: 'RULE_APAAR_FORMAT', name: 'APAAR ID Format Validation', passed: true, severity: 'success', message: 'APAAR ID complies with 12-digit standard structure.' },
@@ -124,7 +129,7 @@ export const INITIAL_STUDENTS: Student[] = [
       { ruleId: 'RULE_INTAKE_LIMIT', name: 'AICTE Approved Intake Audit', passed: true, severity: 'success', message: 'Within approved intake limit.' },
       { ruleId: 'RULE_INCONSISTENT_DATA', name: 'Data Consistency Check', passed: true, severity: 'success', message: 'Student record parameters are consistent with institutional guidelines.' }
     ],
-    flagNotes: 'Record is valid and complies with AICTE intake specifications.'
+    flagNotes: 'Level 1 Format Validated. 12-digit format passed with zero duplicate conflicts.'
   },
   {
     id: 'stu-dtu-002',
@@ -140,6 +145,24 @@ export const INITIAL_STUDENTS: Student[] = [
     gender: 'Female',
     email: 'diya.patel@dtu.ac.in',
     validationStatus: 'valid',
+    apaarStatus: 'document_matched',
+    verificationLevel: 2,
+    verificationSource: 'Level 2 DigiLocker PDF OCR Comparison',
+    verificationDate: '2026-10-26 02:40 PM',
+    officialApiStatus: 'pending_access',
+    documentRecord: {
+      fileName: 'APAAR_Diya_Patel_DigiLocker.pdf',
+      fileSize: 214000,
+      uploadedAt: '2026-10-26 02:40 PM',
+      documentType: 'DigiLocker APAAR Card',
+      extractedName: 'Diya Rajesh Patel',
+      extractedApaarId: '827103948201',
+      nameMatch: true,
+      apaarMatch: true,
+      ocrConfidence: 98,
+      status: 'matched',
+      remarks: 'Candidate name and 12-digit APAAR matched with 98% OCR confidence. Document Comparison – Not Officially Verified.'
+    },
     validationChecks: [
       { ruleId: 'RULE_MANDATORY_FIELDS', name: 'Mandatory Fields Check', passed: true, severity: 'success', message: 'All mandatory student profile fields are present.' },
       { ruleId: 'RULE_APAAR_FORMAT', name: 'APAAR ID Format Validation', passed: true, severity: 'success', message: 'APAAR ID complies with 12-digit standard structure.' },
@@ -148,12 +171,12 @@ export const INITIAL_STUDENTS: Student[] = [
       { ruleId: 'RULE_INTAKE_LIMIT', name: 'AICTE Approved Intake Audit', passed: true, severity: 'success', message: 'Within approved intake limit.' },
       { ruleId: 'RULE_INCONSISTENT_DATA', name: 'Data Consistency Check', passed: true, severity: 'success', message: 'Student record parameters are consistent.' }
     ],
-    flagNotes: 'Record is valid.'
+    flagNotes: 'Level 2 Document Comparison Verified. Matched with DigiLocker issued PDF.'
   },
   {
     id: 'stu-dtu-003',
     name: 'Rohan Vikram Singhania',
-    apaarId: '761928401928', // Intentional Cross-Institution conflict with RV College of Engineering!
+    apaarId: '761928401928', // Cross-Institution conflict with RVCE
     institutionId: 'inst-dtu',
     institutionName: 'Delhi Technological University',
     department: 'Computer Science & Engineering',
@@ -164,6 +187,11 @@ export const INITIAL_STUDENTS: Student[] = [
     gender: 'Male',
     email: 'rohan.singhania@dtu.ac.in',
     validationStatus: 'review',
+    apaarStatus: 'duplicate_detected',
+    verificationLevel: 1,
+    verificationSource: 'Level 1 Inter-Institutional Registry Scanner',
+    verificationDate: '2026-10-28 09:30 AM',
+    officialApiStatus: 'pending_access',
     crossInstitutionConflict: {
       otherInstitutionId: 'inst-rvce',
       otherInstitutionName: 'RV College of Engineering',
@@ -185,12 +213,12 @@ export const INITIAL_STUDENTS: Student[] = [
       { ruleId: 'RULE_INTAKE_LIMIT', name: 'AICTE Approved Intake Audit', passed: true, severity: 'success', message: 'Within approved intake limit.' },
       { ruleId: 'RULE_INCONSISTENT_DATA', name: 'Data Consistency Check', passed: true, severity: 'success', message: 'Data parameters consistent.' }
     ],
-    flagNotes: 'Dual Enrolment Alert: Student APAAR also registered at RV College of Engineering for AY 2025-26. Verification required.'
+    flagNotes: 'Duplicate Alert: Matching APAAR ID found at RV College of Engineering. Investigate potential dual admission.'
   },
   {
     id: 'stu-dtu-004',
     name: 'Ananya S. Iyer',
-    apaarId: '000000000000', // Intentional Dummy/Invalid APAAR format!
+    apaarId: '000000000000', // Dummy 12-digit placeholder
     institutionId: 'inst-dtu',
     institutionName: 'Delhi Technological University',
     department: 'Electronics & Communication',
@@ -201,6 +229,11 @@ export const INITIAL_STUDENTS: Student[] = [
     gender: 'Female',
     email: 'ananya.iyer@dtu.ac.in',
     validationStatus: 'error',
+    apaarStatus: 'invalid_format',
+    verificationLevel: 1,
+    verificationSource: 'Level 1 Syntax & Dummy Filter (000000000000 Rejected)',
+    verificationDate: '2026-10-29 11:00 AM',
+    officialApiStatus: 'pending_access',
     validationChecks: [
       { ruleId: 'RULE_MANDATORY_FIELDS', name: 'Mandatory Fields Check', passed: true, severity: 'success', message: 'All mandatory student profile fields are present.' },
       {
@@ -215,12 +248,12 @@ export const INITIAL_STUDENTS: Student[] = [
       { ruleId: 'RULE_INTAKE_LIMIT', name: 'AICTE Approved Intake Audit', passed: true, severity: 'success', message: 'Passed.' },
       { ruleId: 'RULE_INCONSISTENT_DATA', name: 'Data Consistency Check', passed: true, severity: 'success', message: 'Passed.' }
     ],
-    flagNotes: 'Invalid APAAR Format: Repetitive dummy number placeholder detected. Must upload authentic 12-digit APAAR ID.'
+    flagNotes: 'Invalid Format: Dummy repetitive sequence (000000000000). Genuine 12-digit APAAR required.'
   },
   {
     id: 'stu-dtu-005',
     name: 'Kavita Kumari',
-    apaarId: '984210923841', // Intentional duplicate of stu-dtu-001 within DTU!
+    apaarId: '984210923841', // Local duplicate with Aarav Sharma
     institutionId: 'inst-dtu',
     institutionName: 'Delhi Technological University',
     department: 'Mechanical Engineering',
@@ -231,6 +264,11 @@ export const INITIAL_STUDENTS: Student[] = [
     gender: 'Female',
     email: 'kavita.k@dtu.ac.in',
     validationStatus: 'error',
+    apaarStatus: 'duplicate_detected',
+    verificationLevel: 1,
+    verificationSource: 'Level 1 Intra-College Duplicate Scanner',
+    verificationDate: '2026-10-29 11:45 AM',
+    officialApiStatus: 'pending_access',
     validationChecks: [
       { ruleId: 'RULE_MANDATORY_FIELDS', name: 'Mandatory Fields Check', passed: true, severity: 'success', message: 'All mandatory fields present.' },
       { ruleId: 'RULE_APAAR_FORMAT', name: 'APAAR ID Format Validation', passed: true, severity: 'success', message: 'Format structure is 12 digits.' },
@@ -245,7 +283,7 @@ export const INITIAL_STUDENTS: Student[] = [
       { ruleId: 'RULE_INTAKE_LIMIT', name: 'AICTE Approved Intake Audit', passed: true, severity: 'success', message: 'Passed.' },
       { ruleId: 'RULE_INCONSISTENT_DATA', name: 'Data Consistency Check', passed: true, severity: 'success', message: 'Passed.' }
     ],
-    flagNotes: 'Duplicate APAAR ID within same institution: Collides with Aarav Devendra Sharma.'
+    flagNotes: 'Duplicate APAAR ID within DTU: Already allocated to Aarav Devendra Sharma.'
   },
   {
     id: 'stu-dtu-006',
@@ -260,7 +298,25 @@ export const INITIAL_STUDENTS: Student[] = [
     dateOfAdmission: '2025-08-10',
     gender: 'Male',
     email: 'kabir.rao@dtu.ac.in',
-    validationStatus: 'valid',
+    validationStatus: 'review',
+    apaarStatus: 'manual_review',
+    verificationLevel: 2,
+    verificationSource: 'Level 2 OCR Analysis (Low Confidence / Blurry)',
+    verificationDate: '2026-10-30 01:20 PM',
+    officialApiStatus: 'pending_access',
+    documentRecord: {
+      fileName: 'Blurry_Card_Scan.png',
+      fileSize: 85000,
+      uploadedAt: '2026-10-30 01:20 PM',
+      documentType: 'Scanned Copy',
+      extractedName: 'Kabir H',
+      extractedApaarId: '542198031245',
+      nameMatch: false,
+      apaarMatch: true,
+      ocrConfidence: 45,
+      status: 'unreadable',
+      remarks: 'Card image unreadable or partially obscured (45% confidence). Manual institutional review required.'
+    },
     validationChecks: [
       { ruleId: 'RULE_MANDATORY_FIELDS', name: 'Mandatory Fields Check', passed: true, severity: 'success', message: 'All fields present.' },
       { ruleId: 'RULE_APAAR_FORMAT', name: 'APAAR ID Format Validation', passed: true, severity: 'success', message: 'Valid 12-digit format.' },
@@ -269,7 +325,7 @@ export const INITIAL_STUDENTS: Student[] = [
       { ruleId: 'RULE_INTAKE_LIMIT', name: 'AICTE Approved Intake Audit', passed: true, severity: 'success', message: 'Within approved quota.' },
       { ruleId: 'RULE_INCONSISTENT_DATA', name: 'Data Consistency Check', passed: true, severity: 'success', message: 'Consistent data.' }
     ],
-    flagNotes: 'Record is valid.'
+    flagNotes: 'Manual Review Required: Document scan was blurry (OCR Confidence 45%). Awaiting administrative inspection.'
   },
   {
     id: 'stu-dtu-007',
@@ -284,7 +340,25 @@ export const INITIAL_STUDENTS: Student[] = [
     dateOfAdmission: '2025-08-11',
     gender: 'Female',
     email: 'pooja.meena@dtu.ac.in',
-    validationStatus: 'valid',
+    validationStatus: 'review',
+    apaarStatus: 'document_mismatch',
+    verificationLevel: 2,
+    verificationSource: 'Level 2 DigiLocker PDF OCR Comparison',
+    verificationDate: '2026-10-30 03:50 PM',
+    officialApiStatus: 'pending_access',
+    documentRecord: {
+      fileName: 'DigiLocker_Card_Pooja.pdf',
+      fileSize: 198000,
+      uploadedAt: '2026-10-30 03:50 PM',
+      documentType: 'DigiLocker APAAR Card',
+      extractedName: 'Pooja Devi Meena',
+      extractedApaarId: '639102948172',
+      nameMatch: false,
+      apaarMatch: true,
+      ocrConfidence: 94,
+      status: 'mismatch',
+      remarks: 'Extracted name "Pooja Devi Meena" has middle name mismatch with registered "Pooja Meena". Document Comparison – Not Officially Verified.'
+    },
     validationChecks: [
       { ruleId: 'RULE_MANDATORY_FIELDS', name: 'Mandatory Fields Check', passed: true, severity: 'success', message: 'All mandatory fields present.' },
       { ruleId: 'RULE_APAAR_FORMAT', name: 'APAAR ID Format Validation', passed: true, severity: 'success', message: 'Valid format.' },
@@ -293,10 +367,10 @@ export const INITIAL_STUDENTS: Student[] = [
       { ruleId: 'RULE_INTAKE_LIMIT', name: 'AICTE Approved Intake Audit', passed: true, severity: 'success', message: 'Within approved quota.' },
       { ruleId: 'RULE_INCONSISTENT_DATA', name: 'Data Consistency Check', passed: true, severity: 'success', message: 'Consistent.' }
     ],
-    flagNotes: 'Record is valid.'
+    flagNotes: 'Document Mismatch: DigiLocker name "Pooja Devi Meena" differs from registered name "Pooja Meena".'
   },
 
-  // RVCE Bengaluru Student (contains the cross conflict counterpart)
+  // RVCE Bengaluru Students
   {
     id: 'stu-rvce-001',
     name: 'Rohan V. Singhania',
@@ -311,6 +385,11 @@ export const INITIAL_STUDENTS: Student[] = [
     gender: 'Male',
     email: 'rohan.s@rvce.edu.in',
     validationStatus: 'review',
+    apaarStatus: 'duplicate_detected',
+    verificationLevel: 1,
+    verificationSource: 'Level 1 Inter-Institutional Registry Scanner',
+    verificationDate: '2026-10-28 09:30 AM',
+    officialApiStatus: 'pending_access',
     crossInstitutionConflict: {
       otherInstitutionId: 'inst-dtu',
       otherInstitutionName: 'Delhi Technological University',
@@ -348,6 +427,24 @@ export const INITIAL_STUDENTS: Student[] = [
     gender: 'Female',
     email: 'sneha.v@rvce.edu.in',
     validationStatus: 'valid',
+    apaarStatus: 'document_matched',
+    verificationLevel: 2,
+    verificationSource: 'Level 2 DigiLocker PDF OCR Comparison',
+    verificationDate: '2026-10-25 04:10 PM',
+    officialApiStatus: 'pending_access',
+    documentRecord: {
+      fileName: 'DigiLocker_Sneha_Rao.pdf',
+      fileSize: 220000,
+      uploadedAt: '2026-10-25 04:10 PM',
+      documentType: 'DigiLocker APAAR Card',
+      extractedName: 'Sneha Venkatesh Rao',
+      extractedApaarId: '381920491820',
+      nameMatch: true,
+      apaarMatch: true,
+      ocrConfidence: 99,
+      status: 'matched',
+      remarks: 'DigiLocker document details matched student profile. Document Comparison – Not Officially Verified.'
+    },
     validationChecks: [
       { ruleId: 'RULE_MANDATORY_FIELDS', name: 'Mandatory Fields Check', passed: true, severity: 'success', message: 'All fields present.' },
       { ruleId: 'RULE_APAAR_FORMAT', name: 'APAAR ID Format Validation', passed: true, severity: 'success', message: 'Valid format.' },
@@ -356,7 +453,7 @@ export const INITIAL_STUDENTS: Student[] = [
       { ruleId: 'RULE_INTAKE_LIMIT', name: 'AICTE Approved Intake Audit', passed: true, severity: 'success', message: 'Intake valid.' },
       { ruleId: 'RULE_INCONSISTENT_DATA', name: 'Data Consistency Check', passed: true, severity: 'success', message: 'Data consistent.' }
     ],
-    flagNotes: 'Record is valid.'
+    flagNotes: 'Document Comparison Verified. Matched with issued DigiLocker APAAR card.'
   },
 
   // COEP Pune Students
@@ -374,6 +471,11 @@ export const INITIAL_STUDENTS: Student[] = [
     gender: 'Male',
     email: 'tanmay.deshmukh@coep.ac.in',
     validationStatus: 'valid',
+    apaarStatus: 'format_valid',
+    verificationLevel: 1,
+    verificationSource: 'Level 1 Algorithmic Regex & Duplicate Scanner',
+    verificationDate: '2026-10-22 09:15 AM',
+    officialApiStatus: 'pending_access',
     validationChecks: [
       { ruleId: 'RULE_MANDATORY_FIELDS', name: 'Mandatory Fields Check', passed: true, severity: 'success', message: 'All fields present.' },
       { ruleId: 'RULE_APAAR_FORMAT', name: 'APAAR ID Format Validation', passed: true, severity: 'success', message: 'Valid format.' },
@@ -382,7 +484,7 @@ export const INITIAL_STUDENTS: Student[] = [
       { ruleId: 'RULE_INTAKE_LIMIT', name: 'AICTE Approved Intake Audit', passed: true, severity: 'success', message: 'Intake valid.' },
       { ruleId: 'RULE_INCONSISTENT_DATA', name: 'Data Consistency Check', passed: true, severity: 'success', message: 'Data consistent.' }
     ],
-    flagNotes: 'Record is valid.'
+    flagNotes: 'Format Valid (Level 1). Meets 12-digit format.'
   },
   {
     id: 'stu-coep-002',
@@ -398,6 +500,11 @@ export const INITIAL_STUDENTS: Student[] = [
     gender: 'Female',
     email: 'pranali.shinde@coep.ac.in',
     validationStatus: 'valid',
+    apaarStatus: 'pending_official',
+    verificationLevel: 3,
+    verificationSource: 'API Setu / ABC Integration Gateway (Pending MoE Credentials)',
+    verificationDate: '2026-10-27 02:00 PM',
+    officialApiStatus: 'pending_access',
     validationChecks: [
       { ruleId: 'RULE_MANDATORY_FIELDS', name: 'Mandatory Fields Check', passed: true, severity: 'success', message: 'All fields present.' },
       { ruleId: 'RULE_APAAR_FORMAT', name: 'APAAR ID Format Validation', passed: true, severity: 'success', message: 'Valid format.' },
@@ -406,7 +513,7 @@ export const INITIAL_STUDENTS: Student[] = [
       { ruleId: 'RULE_INTAKE_LIMIT', name: 'AICTE Approved Intake Audit', passed: true, severity: 'success', message: 'Intake valid.' },
       { ruleId: 'RULE_INCONSISTENT_DATA', name: 'Data Consistency Check', passed: true, severity: 'success', message: 'Data consistent.' }
     ],
-    flagNotes: 'Record is valid.'
+    flagNotes: 'Format validated. Level 3 official government verification is pending authorized API credentials.'
   },
 
   // PSG Tech Students
@@ -424,6 +531,24 @@ export const INITIAL_STUDENTS: Student[] = [
     gender: 'Male',
     email: 'karthik.s@psgtech.edu',
     validationStatus: 'valid',
+    apaarStatus: 'document_matched',
+    verificationLevel: 2,
+    verificationSource: 'Level 2 DigiLocker PDF OCR Comparison',
+    verificationDate: '2026-10-26 11:20 AM',
+    officialApiStatus: 'pending_access',
+    documentRecord: {
+      fileName: 'DigiLocker_Karthik.pdf',
+      fileSize: 210000,
+      uploadedAt: '2026-10-26 11:20 AM',
+      documentType: 'DigiLocker APAAR Card',
+      extractedName: 'Karthikeyan Subramanian',
+      extractedApaarId: '849201948201',
+      nameMatch: true,
+      apaarMatch: true,
+      ocrConfidence: 97,
+      status: 'matched',
+      remarks: 'Candidate details matched issued DigiLocker APAAR credential. Document Comparison – Not Officially Verified.'
+    },
     validationChecks: [
       { ruleId: 'RULE_MANDATORY_FIELDS', name: 'Mandatory Fields Check', passed: true, severity: 'success', message: 'All fields present.' },
       { ruleId: 'RULE_APAAR_FORMAT', name: 'APAAR ID Format Validation', passed: true, severity: 'success', message: 'Valid format.' },
@@ -432,10 +557,10 @@ export const INITIAL_STUDENTS: Student[] = [
       { ruleId: 'RULE_INTAKE_LIMIT', name: 'AICTE Approved Intake Audit', passed: true, severity: 'success', message: 'Intake valid.' },
       { ruleId: 'RULE_INCONSISTENT_DATA', name: 'Data Consistency Check', passed: true, severity: 'success', message: 'Data consistent.' }
     ],
-    flagNotes: 'Record is valid.'
+    flagNotes: 'Document Comparison Verified. DigiLocker PDF match confirmed.'
   },
 
-  // VIT Mumbai (Over intake demo & flagged records)
+  // VIT Mumbai Students
   {
     id: 'stu-vit-001',
     name: 'Aditya Manish Rane',
@@ -450,6 +575,11 @@ export const INITIAL_STUDENTS: Student[] = [
     gender: 'Male',
     email: 'aditya.rane@vit.edu.in',
     validationStatus: 'review',
+    apaarStatus: 'format_valid',
+    verificationLevel: 1,
+    verificationSource: 'Level 1 Algorithmic Regex & Duplicate Scanner',
+    verificationDate: '2026-10-27 10:45 AM',
+    officialApiStatus: 'pending_access',
     validationChecks: [
       { ruleId: 'RULE_MANDATORY_FIELDS', name: 'Mandatory Fields Check', passed: true, severity: 'success', message: 'All fields present.' },
       { ruleId: 'RULE_APAAR_FORMAT', name: 'APAAR ID Format Validation', passed: true, severity: 'success', message: 'Format valid.' },
@@ -464,7 +594,7 @@ export const INITIAL_STUDENTS: Student[] = [
       },
       { ruleId: 'RULE_INCONSISTENT_DATA', name: 'Data Consistency Check', passed: true, severity: 'success', message: 'Data consistent.' }
     ],
-    flagNotes: 'Intake Audit Alert: CSE enrolment at 91/90 seats. Management quota allocation requires approval validation.'
+    flagNotes: 'Intake Audit Alert: CSE enrolment at 91/90 seats. Format is valid.'
   }
 ];
 

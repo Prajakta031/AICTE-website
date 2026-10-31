@@ -1,16 +1,19 @@
 import React from 'react';
 import {
   Users,
-  Building,
   CheckCircle2,
   AlertTriangle,
-  XCircle,
-  Copy,
   UploadCloud,
-  UserPlus,
+  FileCheck2,
   ArrowRight,
-  TrendingUp,
-  FileCheck2
+  Copy,
+  Layers,
+  Building2,
+  Check,
+  Info,
+  ChevronRight,
+  ArrowUpRight,
+  ShieldCheck
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -20,428 +23,506 @@ import {
   YAxis,
   Tooltip,
   Legend,
-  PieChart,
-  Pie,
-  Cell
+  CartesianGrid
 } from 'recharts';
 import { useApp } from '../../context/AppContext';
-import { formatApaarId } from '../../utils/validationEngine';
-
-const CATEGORY_COLORS = ['#0d9488', '#0284c7', '#f59e0b', '#6366f1', '#ec4899', '#8b5cf6'];
-const STATUS_COLORS = ['#10b981', '#f59e0b', '#f43f5e'];
+import {
+  formatApaarId,
+  calculateVerificationBreakdown,
+  getApaarStatusMeta
+} from '../../utils/validationEngine';
 
 export const CollegeDashboard: React.FC = () => {
   const {
     currentInstitution,
     students,
-    alerts,
     setActiveTab,
-    setSelectedStudentForDetail
+    setSelectedStudentForDetail,
+    theme
   } = useApp();
 
-  // Institution students
   const instStudents = students.filter(s => s.institutionId === currentInstitution.id);
   const totalApprovedIntake = currentInstitution.approvedTotalIntake;
   const actualEnrolment = instStudents.length;
-  const remainingSeats = Math.max(0, totalApprovedIntake - actualEnrolment);
+  const vBreakdown = calculateVerificationBreakdown(instStudents);
+  const flaggedStudents = instStudents.filter(s => s.validationStatus !== 'valid');
 
-  const validRecordsCount = instStudents.filter(s => s.validationStatus === 'valid').length;
-  const reviewRecordsCount = instStudents.filter(s => s.validationStatus === 'review').length;
-  const errorRecordsCount = instStudents.filter(s => s.validationStatus === 'error').length;
-  const totalFlagged = reviewRecordsCount + errorRecordsCount;
+  // Theme-aware chart & accent colors
+  const getChartColors = () => {
+    switch (theme) {
+      case 'bharat-royal':
+        return { approved: '#0b192c', enrolled: '#ea580c', primaryBtn: 'bg-orange-600 hover:bg-orange-700 text-white' };
+      case 'digital-indigo':
+        return { approved: '#1e1b4b', enrolled: '#0284c7', primaryBtn: 'bg-indigo-600 hover:bg-indigo-700 text-white' };
+      case 'academic-emerald':
+        return { approved: '#064e3b', enrolled: '#059669', primaryBtn: 'bg-emerald-700 hover:bg-emerald-800 text-white' };
+      case 'minimal-slate':
+        return { approved: '#1e293b', enrolled: '#2563eb', primaryBtn: 'bg-slate-900 hover:bg-slate-800 text-white' };
+      case 'executive-dark':
+        return { approved: '#334155', enrolled: '#f59e0b', primaryBtn: 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold' };
+      default:
+        return { approved: '#0b192c', enrolled: '#ea580c', primaryBtn: 'bg-orange-600 hover:bg-orange-700 text-white' };
+    }
+  };
 
-  // Duplicate APAARs count
-  const duplicateApaarCount = instStudents.filter(s => {
-    return s.validationChecks?.some(
-      c => (c.ruleId === 'RULE_LOCAL_DUPLICATE' || c.ruleId === 'RULE_CROSS_INSTITUTION_DUPLICATE') && !c.passed
-    );
-  }).length;
+  const chartTheme = getChartColors();
 
-  // Missing or Invalid records count
-  const invalidOrMissingCount = instStudents.filter(s => {
-    return s.validationChecks?.some(
-      c => (c.ruleId === 'RULE_MANDATORY_FIELDS' || c.ruleId === 'RULE_APAAR_FORMAT') && !c.passed
-    );
-  }).length;
-
-  // Department-wise Intake vs Actual chart data
+  // Department capacity data
   const deptData = currentInstitution.departments.map(dept => {
-    const enrolled = instStudents.filter(s => s.department.toLowerCase() === dept.department.toLowerCase()).length;
+    const enrolled = instStudents.filter(
+      s => s.department.toLowerCase() === dept.department.toLowerCase()
+    ).length;
     return {
-      name: dept.department.replace('Engineering', 'Engg.').replace('Computer Science & Engg.', 'CSE').replace('Electronics & Communication', 'ECE').replace('AI & Data Science', 'AI/DS'),
+      name: dept.department
+        .replace('Computer Science & Engineering', 'CSE')
+        .replace('Electronics & Communication', 'ECE')
+        .replace('Mechanical Engineering', 'Mech')
+        .replace('Civil Engineering', 'Civil')
+        .replace('AI & Data Science', 'AI/DS')
+        .replace('Electrical Engineering', 'EE'),
       approved: dept.approvedIntake,
-      enrolled: enrolled,
-      available: Math.max(0, dept.approvedIntake - enrolled)
+      enrolled
     };
   });
 
-  // Category distribution data
-  const categoryMap: Record<string, number> = {};
-  instStudents.forEach(s => {
-    categoryMap[s.admissionCategory] = (categoryMap[s.admissionCategory] || 0) + 1;
-  });
-  const categoryData = Object.entries(categoryMap).map(([category, count]) => ({
-    name: category,
-    value: count
-  }));
-
-  // Status Distribution data
-  const statusPieData = [
-    { name: 'Valid Records', value: validRecordsCount },
-    { name: 'Review Required', value: reviewRecordsCount },
-    { name: 'Errors Detected', value: errorRecordsCount }
-  ];
-
-  // Recent Flagged Students
-  const flaggedStudents = instStudents
-    .filter(s => s.validationStatus !== 'valid')
-    .slice(0, 5);
+  const percentOccupancy = totalApprovedIntake > 0
+    ? Math.round((actualEnrolment / totalApprovedIntake) * 100)
+    : 0;
 
   return (
     <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              {currentInstitution.name}
+      {/* Executive Page Header */}
+      <div className="pb-4 border-b border-slate-200/80">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+                {currentInstitution.name}
+              </h1>
+              <span className="text-slate-300">/</span>
+              <span className="text-xs font-mono font-medium text-slate-500">
+                AICTE Code: {currentInstitution.code}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Campus Census & Enrolment Health · {currentInstitution.city}, {currentInstitution.state}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setActiveTab('upload')}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 shadow-2xs cursor-pointer transition-all ${chartTheme.primaryBtn}`}
+            >
+              <UploadCloud className="w-4 h-4" />
+              <span>Upload Student File</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('students')}
+              className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 flex items-center gap-2 shadow-2xs cursor-pointer transition-colors"
+            >
+              <Users className="w-4 h-4 text-slate-500" />
+              <span>Manage Students</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 4 Precision Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Approved Intake */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+              Sanctioned Intake
+            </span>
+            <div className="w-7 h-7 rounded-md bg-slate-100 flex items-center justify-center text-slate-600">
+              <Layers className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-3xl font-bold font-mono tracking-tight text-slate-900 tabular-nums">
+              {totalApprovedIntake.toLocaleString()}
+            </div>
+            <div className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+              <span>AICTE Quota Limit</span>
+              <span className="text-slate-300">·</span>
+              <span className="text-slate-600 font-medium">100% cap</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Enrolled Students */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+              Total Enrolment
+            </span>
+            <div className="w-7 h-7 rounded-md bg-blue-50 flex items-center justify-center text-blue-600">
+              <Users className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-3xl font-bold font-mono tracking-tight text-slate-900 tabular-nums">
+              {actualEnrolment.toLocaleString()}
+            </div>
+            <div className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+              <span className="text-blue-700 font-semibold">{percentOccupancy}% seats allocated</span>
+              <span className="text-slate-300">·</span>
+              <span>{totalApprovedIntake - actualEnrolment} available</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Format Valid (Level 1) */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-[11px] font-semibold tracking-wider text-blue-800 uppercase">
+              Format Valid (L1)
+            </span>
+            <div className="w-7 h-7 rounded-md bg-blue-50 flex items-center justify-center text-blue-600">
+              <FileCheck2 className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-3xl font-bold font-mono tracking-tight text-blue-700 tabular-nums">
+              {vBreakdown.formatValid.toLocaleString()}
+            </div>
+            <div className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+              <span className="text-blue-700 font-medium">12-Digit Structure OK</span>
+              <span className="text-slate-300">·</span>
+              <span className="text-[10px] text-slate-400">Not Official</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Document Matched (Level 2) */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-[11px] font-semibold tracking-wider text-emerald-800 uppercase">
+              Doc Matched (L2)
+            </span>
+            <div className="w-7 h-7 rounded-md bg-emerald-50 flex items-center justify-center text-emerald-600">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-3xl font-bold font-mono tracking-tight text-emerald-700 tabular-nums">
+              {vBreakdown.documentMatched.toLocaleString()}
+            </div>
+            <div className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+              <span className="text-emerald-700 font-medium">DigiLocker OCR Match</span>
+              <span className="text-slate-300">·</span>
+              <span className="text-[10px] text-slate-400">Card Verified</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* THREE-LEVEL APAAR VERIFICATION AUDIT MATRIX */}
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-teal-700" />
+              <span>Institutional APAAR Verification Audit Matrix</span>
             </h2>
-            <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-              {currentInstitution.code}
+            <p className="text-xs text-slate-500 mt-0.5">
+              Segregated breakdown across Level 1 (Format Check), Level 2 (Document Comparison), and Level 3 (Official Gateway).
+            </p>
+          </div>
+          <div className="px-2.5 py-1 rounded bg-slate-100 border border-slate-200 text-[11px] text-slate-600 font-mono">
+            Audit Standard: SIH26263 Compliance
+          </div>
+        </div>
+
+        {/* 5 Distinct Cards per Prompt Requirement */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* 1. Format Valid Records */}
+          <div className="p-3.5 rounded-lg border border-blue-200 bg-blue-50/40">
+            <span className="text-[10px] font-bold text-blue-900 uppercase tracking-wider block">
+              1. Format Valid
+            </span>
+            <div className="text-2xl font-bold font-mono text-blue-800 mt-1 tabular-nums">
+              {vBreakdown.formatValid}
+            </div>
+            <p className="text-[10px] text-blue-700 mt-1 leading-snug">
+              12-digit format passed with zero duplicate locks.
+            </p>
+            <span className="inline-block mt-2 text-[9px] font-semibold text-blue-800 bg-blue-100/80 px-1.5 py-0.5 rounded">
+              Level 1 (Not Official)
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            AICTE Approved Enrolment & APAAR Verification Dashboard · Academic Year 2025-26
-          </p>
+
+          {/* 2. Document Details Matched */}
+          <div className="p-3.5 rounded-lg border border-emerald-200 bg-emerald-50/40">
+            <span className="text-[10px] font-bold text-emerald-900 uppercase tracking-wider block">
+              2. Doc Matched
+            </span>
+            <div className="text-2xl font-bold font-mono text-emerald-800 mt-1 tabular-nums">
+              {vBreakdown.documentMatched}
+            </div>
+            <p className="text-[10px] text-emerald-700 mt-1 leading-snug">
+              Name & APAAR matched against DigiLocker card.
+            </p>
+            <span className="inline-block mt-2 text-[9px] font-semibold text-emerald-800 bg-emerald-100/80 px-1.5 py-0.5 rounded">
+              Level 2 (Document Match)
+            </span>
+          </div>
+
+          {/* 3. Duplicate Detected */}
+          <div className="p-3.5 rounded-lg border border-amber-300 bg-amber-50/40">
+            <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block">
+              3. Duplicate Detected
+            </span>
+            <div className="text-2xl font-bold font-mono text-amber-800 mt-1 tabular-nums">
+              {vBreakdown.duplicateDetected}
+            </div>
+            <p className="text-[10px] text-amber-700 mt-1 leading-snug">
+              Duplicate within college or across institutions.
+            </p>
+            <button
+              onClick={() => setActiveTab('duplicates')}
+              className="inline-block mt-2 text-[9px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 px-1.5 py-0.5 rounded cursor-pointer"
+            >
+              Inspect Duplicates →
+            </button>
+          </div>
+
+          {/* 4. Manual Review Required */}
+          <div className="p-3.5 rounded-lg border border-purple-200 bg-purple-50/40">
+            <span className="text-[10px] font-bold text-purple-900 uppercase tracking-wider block">
+              4. Manual Review
+            </span>
+            <div className="text-2xl font-bold font-mono text-purple-800 mt-1 tabular-nums">
+              {vBreakdown.manualReview}
+            </div>
+            <p className="text-[10px] text-purple-700 mt-1 leading-snug">
+              Blurry document scan or spelling variance.
+            </p>
+            <span className="inline-block mt-2 text-[9px] font-semibold text-purple-800 bg-purple-100/80 px-1.5 py-0.5 rounded">
+              Awaiting Inspection
+            </span>
+          </div>
+
+          {/* 5. Officially Verified (Government API) */}
+          <div className="p-3.5 rounded-lg border border-slate-300 bg-slate-100/60">
+            <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider block">
+              5. Officially Verified
+            </span>
+            <div className="text-2xl font-bold font-mono text-slate-800 mt-1 tabular-nums">
+              {vBreakdown.officiallyVerified}
+            </div>
+            <p className="text-[10px] text-slate-600 mt-1 leading-snug">
+              Authorized API Setu gateway integration.
+            </p>
+            <span className="inline-block mt-2 text-[9px] font-semibold text-slate-700 bg-slate-200 px-1.5 py-0.5 rounded">
+              API Access Pending
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setActiveTab('upload')}
-            className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-teal-700 hover:bg-teal-800 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-          >
-            <UploadCloud className="w-4 h-4" />
-            <span>Upload Student CSV</span>
-          </button>
+        {/* Ethical Separation Banner */}
+        <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-slate-500 shrink-0" />
+            <span className="text-[11px] text-slate-600">
+              <strong>Audit Policy:</strong> Format-Valid and Document-Matched records are reported separately and <strong>never combined</strong> with Officially Verified counts until live government API credentials are authenticated.
+            </span>
+          </div>
           <button
             onClick={() => setActiveTab('students')}
-            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            className="text-xs font-semibold text-teal-800 hover:text-teal-950 whitespace-nowrap cursor-pointer"
           >
-            <Users className="w-4 h-4 text-teal-700" />
-            <span>Manage Records</span>
+            Filter Records →
           </button>
         </div>
       </div>
 
-      {/* Primary KPI Grid (6 Cards per requirement) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {/* Approved Intake */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
-          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            Approved Intake
-          </div>
-          <div className="my-2">
-            <div className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
-              {totalApprovedIntake}
-            </div>
-            <div className="text-[11px] text-slate-400">Sanctioned AICTE Quota</div>
-          </div>
-          <div className="text-[10px] text-teal-700 font-medium">Cap verified</div>
-        </div>
-
-        {/* Actual Enrolment */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
-          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            Actual Enrolment
-          </div>
-          <div className="my-2">
-            <div className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
-              {actualEnrolment}
-            </div>
-            <div className="text-[11px] text-slate-400">
-              {totalApprovedIntake > 0 ? `${((actualEnrolment / totalApprovedIntake) * 100).toFixed(1)}% Capacity Filled` : ''}
-            </div>
-          </div>
-          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-            <div
-              className={`h-full rounded-full ${
-                actualEnrolment > totalApprovedIntake ? 'bg-rose-500' : 'bg-teal-600'
-              }`}
-              style={{ width: `${Math.min(100, (actualEnrolment / (totalApprovedIntake || 1)) * 100)}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Remaining Seats */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
-          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            Remaining Seats
-          </div>
-          <div className="my-2">
-            <div className="text-2xl font-bold font-mono text-teal-700 tabular-nums">
-              {remainingSeats}
-            </div>
-            <div className="text-[11px] text-slate-400">Vacant Seats Left</div>
-          </div>
-          <div className="text-[10px] text-slate-500">Across all departments</div>
-        </div>
-
-        {/* Flagged Records */}
-        <div className="bg-white p-4 rounded-xl border border-amber-200 bg-amber-50/20 shadow-2xs flex flex-col justify-between">
-          <div className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider flex items-center justify-between">
-            <span>Flagged Records</span>
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-          </div>
-          <div className="my-2">
-            <div className="text-2xl font-bold font-mono text-amber-700 tabular-nums">
-              {totalFlagged}
-            </div>
-            <div className="text-[11px] text-amber-700/80">Pending Remediation</div>
-          </div>
-          <button
-            onClick={() => setActiveTab('validation')}
-            className="text-[10px] font-semibold text-amber-800 hover:underline text-left cursor-pointer"
-          >
-            Inspect audit reports →
-          </button>
-        </div>
-
-        {/* Duplicate APAAR IDs */}
-        <div className="bg-white p-4 rounded-xl border border-rose-200 bg-rose-50/20 shadow-2xs flex flex-col justify-between">
-          <div className="text-[11px] font-semibold text-rose-800 uppercase tracking-wider flex items-center justify-between">
-            <span>Duplicate APAARs</span>
-            <Copy className="w-3.5 h-3.5 text-rose-600" />
-          </div>
-          <div className="my-2">
-            <div className="text-2xl font-bold font-mono text-rose-700 tabular-nums">
-              {duplicateApaarCount}
-            </div>
-            <div className="text-[11px] text-rose-700/80">Internal & Cross-College</div>
-          </div>
-          <div className="text-[10px] text-rose-700">High-priority clearance</div>
-        </div>
-
-        {/* Missing or Invalid Records */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
-          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-            <span>Missing / Invalid</span>
-            <XCircle className="w-3.5 h-3.5 text-slate-400" />
-          </div>
-          <div className="my-2">
-            <div className="text-2xl font-bold font-mono text-slate-800 tabular-nums">
-              {invalidOrMissingCount}
-            </div>
-            <div className="text-[11px] text-slate-400">Format or Mandatory gaps</div>
-          </div>
-          <div className="text-[10px] text-slate-500">Correct in Batch Upload</div>
-        </div>
-      </div>
-
-      {/* Visual Charts Grid */}
+      {/* Middle Section: Department Seats Breakdown & Fast Pathways */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chart 1: Approved Intake vs Actual Enrolment (Bar Chart) */}
-        <div className="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+        {/* Left: Department Seats Chart */}
+        <div className="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200/80 shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-bold text-sm text-slate-900">
-                Department-wise Intake vs. Actual Enrolment
-              </h3>
+              <h2 className="text-sm font-bold text-slate-900 tracking-tight">
+                Sanctioned vs. Enrolled Capacity by Discipline
+              </h2>
               <p className="text-xs text-slate-500">
-                Comparison of AICTE approved seat limits against registered APAAR enrolments
-              </p>
-            </div>
-            <span className="text-xs font-mono text-slate-400">Seats Count</span>
-          </div>
-
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={deptData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-10} textAnchor="end" />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#ffffff',
-                    borderColor: '#cbd5e1',
-                    borderRadius: '8px',
-                    fontSize: '12px'
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                <Bar dataKey="approved" name="Approved Intake Quota" fill="#0f766e" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="enrolled" name="Current Enrolment" fill="#0284c7" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Chart 2: Validation Status Breakdown (Donut Chart) */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4 flex flex-col justify-between">
-          <div>
-            <h3 className="font-bold text-sm text-slate-900">
-              Validation Status Breakdown
-            </h3>
-            <p className="text-xs text-slate-500">
-              Rule-based validation audit across all enrolled student records
-            </p>
-          </div>
-
-          <div className="h-52 w-full flex items-center justify-center">
-            {instStudents.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={statusPieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={75}
-                    paddingAngle={4}
-                    dataKey="value"
-                  >
-                    {statusPieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={STATUS_COLORS[index % STATUS_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#ffffff',
-                      borderColor: '#cbd5e1',
-                      borderRadius: '8px',
-                      fontSize: '12px'
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="text-xs text-slate-400">No student records enrolled yet</div>
-            )}
-          </div>
-
-          <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-emerald-800 font-medium">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <span>Valid Records:</span>
-              </div>
-              <span className="font-mono font-bold text-slate-800">{validRecordsCount}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-amber-800 font-medium">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                <span>Requires Review:</span>
-              </div>
-              <span className="font-mono font-bold text-slate-800">{reviewRecordsCount}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-rose-800 font-medium">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                <span>Error Detected:</span>
-              </div>
-              <span className="font-mono font-bold text-slate-800">{errorRecordsCount}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Row 2: Category-wise Distribution & Flagged Records Preview */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Category distribution */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
-          <div>
-            <h3 className="font-bold text-sm text-slate-900">
-              Category-wise Enrolment Statistics
-            </h3>
-            <p className="text-xs text-slate-500">
-              General, OBC, SC, ST, EWS, and Management Quota breakdown
-            </p>
-          </div>
-
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={categoryData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                <XAxis type="number" tick={{ fontSize: 11 }} />
-                <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={80} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#ffffff',
-                    borderColor: '#cbd5e1',
-                    borderRadius: '8px',
-                    fontSize: '12px'
-                  }}
-                />
-                <Bar dataKey="value" name="Students" fill="#0d9488" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Flagged Records Watchlist Table */}
-        <div className="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600" />
-                <span>Flagged Records Requiring Attention</span>
-              </h3>
-              <p className="text-xs text-slate-500">
-                Students with duplicate APAAR IDs, invalid format, or intake threshold warnings
+                Departmental breakdown of approved intake versus live APAAR registrations
               </p>
             </div>
             <button
-              onClick={() => setActiveTab('students')}
-              className="text-xs font-semibold text-teal-700 hover:text-teal-900 flex items-center gap-1 cursor-pointer"
+              onClick={() => setActiveTab('intake')}
+              className="text-xs font-semibold text-slate-700 hover:text-slate-950 flex items-center gap-1 cursor-pointer"
             >
-              <span>View all ({totalFlagged})</span>
+              <span>Capacity Audit</span>
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+          </div>
+
+          <div className="h-64 w-full pt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={deptData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#ffffff',
+                    borderColor: '#e2e8f0',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '12px' }} />
+                <Bar dataKey="approved" name="Sanctioned Intake" fill={chartTheme.approved} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="enrolled" name="Live Enrolments" fill={chartTheme.enrolled} radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Right: Operational Pathways */}
+        <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-2xs space-y-3 flex flex-col justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 mb-1">
+              Core Administrative Actions
+            </h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Direct access to essential compliance tools and data processing:
+            </p>
+
+            <div className="space-y-2">
+              <button
+                onClick={() => setActiveTab('upload')}
+                className="w-full p-3 rounded-lg border border-slate-200/80 hover:bg-slate-50/80 text-left transition-colors flex items-center justify-between text-xs cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-700 flex items-center justify-center font-mono font-bold text-[11px]">
+                    01
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-900 block">Batch File Upload</span>
+                    <span className="text-slate-500 text-[11px]">Upload Excel or CSV roster</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition-colors" />
+              </button>
+
+              <button
+                onClick={() => setActiveTab('validation')}
+                className="w-full p-3 rounded-lg border border-slate-200/80 hover:bg-slate-50/80 text-left transition-colors flex items-center justify-between text-xs cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-700 flex items-center justify-center font-mono font-bold text-[11px]">
+                    02
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-900 block">Data Verification Engine</span>
+                    <span className="text-slate-500 text-[11px]">Run automated audit rules</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition-colors" />
+              </button>
+
+              <button
+                onClick={() => setActiveTab('duplicates')}
+                className="w-full p-3 rounded-lg border border-slate-200/80 hover:bg-slate-50/80 text-left transition-colors flex items-center justify-between text-xs cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-700 flex items-center justify-center font-mono font-bold text-[11px]">
+                    03
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-900 block">Cross-Campus Deduplication</span>
+                    <span className="text-slate-500 text-[11px]">Identify dual college admissions</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition-colors" />
+              </button>
+
+              <button
+                onClick={() => setActiveTab('reports')}
+                className="w-full p-3 rounded-lg border border-slate-200/80 hover:bg-slate-50/80 text-left transition-colors flex items-center justify-between text-xs cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-700 flex items-center justify-center font-mono font-bold text-[11px]">
+                    04
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-900 block">AICTE Compliance Dossiers</span>
+                    <span className="text-slate-500 text-[11px]">Export official certificates</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition-colors" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Flagged Student Records requiring review */}
+      {flaggedStudents.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
+          <div className="p-4 bg-slate-50/70 border-b border-slate-200/80 flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <span>Pending Remediation Queue ({flaggedStudents.length})</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Records flagged for format mismatches, duplicate IDs, or missing mandatory profile details.
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveTab('validation')}
+              className="text-xs font-semibold text-slate-700 hover:text-slate-950 flex items-center gap-1 cursor-pointer"
+            >
+              <span>View Full Report</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {flaggedStudents.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-lg">
-              <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-              <p className="font-semibold text-slate-700 text-xs">No flagged student records!</p>
-              <p className="text-[11px] text-slate-400">All registered students currently pass validation rules.</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg overflow-hidden">
-              {flaggedStudents.map(student => (
-                <div
-                  key={student.id}
-                  onClick={() => setSelectedStudentForDetail(student)}
-                  className="p-3 text-xs flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors"
-                >
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900">{student.name}</span>
-                      <span className="text-[11px] font-mono text-slate-500">
-                        ({formatApaarId(student.apaarId) || 'Missing ID'})
-                      </span>
-                      <span
-                        className={`text-[10px] font-semibold px-1.5 py-0.2 rounded ${
-                          student.validationStatus === 'error'
-                            ? 'bg-rose-100 text-rose-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {student.validationStatus === 'error' ? 'Error' : 'Review'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 truncate max-w-[450px]">
-                      {student.flagNotes}
-                    </p>
+          <div className="divide-y divide-slate-100">
+            {flaggedStudents.slice(0, 5).map(student => (
+              <div
+                key={student.id}
+                className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 text-xs transition-colors"
+              >
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-900">{student.name}</span>
+                    <span className="text-slate-300">·</span>
+                    <span className="font-mono text-slate-600">{formatApaarId(student.apaarId) || 'Missing ID'}</span>
+                    <span className="text-slate-300">·</span>
+                    <span className="text-slate-500">{student.department}</span>
                   </div>
-
-                  <div className="text-right shrink-0">
-                    <span className="text-xs font-semibold text-teal-700 hover:underline">
-                      Review & Resolve →
-                    </span>
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5 text-[10px] text-slate-500">
+                    <span className="font-medium text-slate-700">Verification Source:</span>
+                    <span className="text-slate-600">{student.verificationSource || 'Level 1 Algorithmic Validation'}</span>
+                    <span className="text-slate-300">·</span>
+                    <span className="font-medium text-slate-700">Date:</span>
+                    <span className="font-mono text-slate-600">{student.verificationDate || '2026-10-31'}</span>
                   </div>
+                  <p className="text-amber-800 text-[11px] pt-0.5">
+                    {student.flagNotes}
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
+
+                <button
+                  onClick={() => setSelectedStudentForDetail(student)}
+                  className="px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-100 text-slate-800 font-semibold text-xs flex items-center gap-1 self-start sm:self-auto cursor-pointer transition-colors"
+                >
+                  <span>Resolve Flag</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

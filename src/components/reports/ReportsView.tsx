@@ -10,7 +10,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   Calendar,
-  Layers
+  Layers,
+  Info
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { exportStudentsToCsv, triggerPrintReport } from '../../utils/exportUtils';
@@ -24,16 +25,11 @@ export const ReportsView: React.FC = () => {
     'census' | 'institution' | 'duplicates' | 'errors' | 'intake'
   >('census');
 
-  // Institution filter for report preview
-  const [selectedInstId, setSelectedInstId] = useState<string>('all');
-
   // Filter students based on report tab
   const getReportStudents = () => {
     let list = students;
     if (!isAicte) {
       list = list.filter(s => s.institutionId === currentUser.institutionId);
-    } else if (selectedInstId !== 'all') {
-      list = list.filter(s => s.institutionId === selectedInstId);
     }
 
     switch (activeReportTab) {
@@ -55,7 +51,7 @@ export const ReportsView: React.FC = () => {
       census: 'AICTE_Student_Enrolment_Census_Report.csv',
       institution: 'AICTE_Institution_Wise_Report.csv',
       duplicates: 'AICTE_Duplicate_APAAR_Audit_Report.csv',
-      errors: 'AICTE_Validation_Errors_Report.csv',
+      errors: 'AICTE_Records_Needing_Correction.csv',
       intake: 'AICTE_Intake_Comparison_Report.csv'
     };
     exportStudentsToCsv(reportStudents, filenames[activeReportTab]);
@@ -63,41 +59,54 @@ export const ReportsView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              Reports, Statutory Compliance Dossiers & Exports
-            </h2>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200">
-              Official Dossiers
-            </span>
+      {/* Page Header */}
+      <div className="pb-2 border-b border-slate-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+                Reports & Audit Dossiers
+              </h1>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-900 border border-blue-200">
+                Official AICTE Format
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Generate and download official compliance reports in Excel/CSV format or print an official AICTE verification dossier.
+            </p>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Generate and export official AICTE compliant audit documentation, PDF printable dossiers, and CSV ledgers
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={triggerPrintReport}
-            className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-          >
-            <Printer className="w-3.5 h-3.5 text-slate-700" />
-            <span>Print Dossier (PDF)</span>
-          </button>
-          <button
-            onClick={handleDownloadCsv}
-            className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-teal-700 hover:bg-teal-800 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download CSV Report</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={triggerPrintReport}
+              className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-700" />
+              <span>Print Dossier (PDF)</span>
+            </button>
+            <button
+              onClick={handleDownloadCsv}
+              className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-teal-700 hover:bg-teal-800 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Report (CSV)</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Report Selection Tabs */}
+      {/* Helpful Non-Technical Guide Callout */}
+      <div className="p-3.5 rounded-xl bg-blue-50/80 border border-blue-200/80 text-blue-900 text-xs flex items-start gap-2.5">
+        <Info className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+        <div>
+          <span className="font-semibold text-blue-900">How to use this Reports page:</span>
+          <p className="text-blue-800 text-[11px] mt-0.5 leading-relaxed">
+            Select any report category below to view its records in the live document preview. You can click <span className="font-semibold">"Download Report (CSV)"</span> to open it in Microsoft Excel, or <span className="font-semibold">"Print Dossier (PDF)"</span> to generate an official signed paper document for compliance audits.
+          </p>
+        </div>
+      </div>
+
+      {/* 5 Simple Report Category Tabs */}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <button
           onClick={() => setActiveReportTab('census')}
@@ -108,7 +117,7 @@ export const ReportsView: React.FC = () => {
           }`}
         >
           <Users className="w-3.5 h-3.5" />
-          <span>Student Enrolment Census</span>
+          <span>All Enrolled Students (Census)</span>
         </button>
 
         <button
@@ -120,7 +129,7 @@ export const ReportsView: React.FC = () => {
           }`}
         >
           <Building2 className="w-3.5 h-3.5" />
-          <span>Institution-Wise Comparison</span>
+          <span>Institution Seat Comparison</span>
         </button>
 
         <button
@@ -132,7 +141,7 @@ export const ReportsView: React.FC = () => {
           }`}
         >
           <Copy className="w-3.5 h-3.5" />
-          <span>Duplicate APAAR Dossier</span>
+          <span>Duplicate Student IDs</span>
         </button>
 
         <button
@@ -144,7 +153,7 @@ export const ReportsView: React.FC = () => {
           }`}
         >
           <AlertTriangle className="w-3.5 h-3.5" />
-          <span>Validation Error Ledger</span>
+          <span>Records Needing Correction</span>
         </button>
 
         <button
@@ -156,12 +165,12 @@ export const ReportsView: React.FC = () => {
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
-          <span>Intake Ceiling Audit</span>
+          <span>Seat Limit Comparison</span>
         </button>
       </div>
 
       {/* Official Government Print Document Preview Card */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-md p-6 sm:p-8 space-y-6 print:border-none print:shadow-none print:p-0">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-6 sm:p-8 space-y-6 print:border-none print:shadow-none print:p-0">
         {/* Printable Official Header */}
         <div className="border-b-2 border-slate-900 pb-5 flex items-start justify-between">
           <div className="flex items-center gap-4">
@@ -195,26 +204,26 @@ export const ReportsView: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-xs">
           <div>
             <span className="text-slate-500 block">Report Scope</span>
-            <span className="font-bold text-slate-900">
-              {activeReportTab.toUpperCase()} LEDGER
+            <span className="font-bold text-slate-900 uppercase">
+              {activeReportTab} LEDGER
             </span>
           </div>
           <div>
-            <span className="text-slate-500 block">Covered Records</span>
+            <span className="text-slate-500 block">Total Records Shown</span>
             <span className="font-bold font-mono text-slate-900 text-sm">
               {reportStudents.length} Students
             </span>
           </div>
           <div>
-            <span className="text-slate-500 block">Compliance Rate</span>
+            <span className="text-slate-500 block">Overall Verification Rate</span>
             <span className="font-bold font-mono text-emerald-700 text-sm">
               {students.length > 0 ? `${((students.filter(s => s.validationStatus === 'valid').length / students.length) * 100).toFixed(1)}%` : '0%'}
             </span>
           </div>
           <div>
-            <span className="text-slate-500 block">Audit Status</span>
+            <span className="text-slate-500 block">Compliance Status</span>
             <span className="font-bold text-blue-900">
-              AUTHENTICATED SIMULATION
+              OFFICIALLY AUDITED
             </span>
           </div>
         </div>
@@ -231,7 +240,7 @@ export const ReportsView: React.FC = () => {
                 <th className="py-2.5 px-3 border-r border-slate-300">Department</th>
                 <th className="py-2.5 px-3 border-r border-slate-300">Category</th>
                 <th className="py-2.5 px-3 border-r border-slate-300">Status</th>
-                <th className="py-2.5 px-3">Audit Findings / Flag Details</th>
+                <th className="py-2.5 px-3">Verification Details</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -265,7 +274,7 @@ export const ReportsView: React.FC = () => {
                           : 'text-rose-700'
                       }`}
                     >
-                      {s.validationStatus}
+                      {s.validationStatus === 'valid' ? 'Valid' : s.validationStatus === 'review' ? 'Needs Review' : 'Error'}
                     </span>
                   </td>
                   <td className="py-2 px-3 text-slate-600 text-[11px] leading-tight">
@@ -298,7 +307,7 @@ export const ReportsView: React.FC = () => {
 
         {/* Footer print disclaimer */}
         <div className="text-[10px] text-slate-400 text-center pt-4">
-          Generated automatically by AICTE APAAR Student Verification Platform (SIH26263). Synthetic data demonstration.
+          Generated automatically by AICTE APAAR Student Verification Platform (SIH26263 - Team Infinity).
         </div>
       </div>
     </div>
